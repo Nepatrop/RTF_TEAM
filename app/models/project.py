@@ -1,4 +1,4 @@
 from app.core.database import Base
 
-class Project(Base):
+class Project():
     __tablename__ = "projects"

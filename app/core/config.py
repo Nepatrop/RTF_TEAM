@@ -1,12 +1,24 @@
+import os
 from pydantic_settings import BaseSettings
+from dotenv import load_dotenv
+
+load_dotenv()
+
 
 class Settings(BaseSettings):
-    PROJECT_NAME: str = "Business Requirements AI Agent"
-    DATABASE_URL: str = "postgresql://user:password@localhost/dbname"
-    SECRET_KEY: str = "secret-key"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
-    
-    class Config:
-        env_file = ".env"
+    PROJECT_NAME: str = 'Business Requirements AI Agent'
+    DATABASE_URL: str = os.getenv("", "DATABASE_URL")
+    SECRET_KEY: str = os.getenv("", "SECRET_KEY")
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = os.getenv("", "ACCESS_TOKEN_EXPIRE_MINUTES")
+    BACKEND_CORS_ORIGINS: str = os.getenv("", "BACKEND_CORS_ORIGINS")
 
-settings = Settings()
+
+class LocalSettings(Settings):
+    RELOAD: bool = True
+
+
+settings_name = {
+    'local': LocalSettings(),
+    'production': Settings()
+}
+settings = settings_name[os.getenv('APP_ENV') or 'local']

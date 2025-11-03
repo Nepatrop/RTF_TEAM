@@ -8,8 +8,8 @@ class SessionStatus(enum.Enum):
     ERROR = "error"
     CANCELLED = "cancelled"
 
-class AgentSession(Base):
+class AgentSession():
     __tablename__ = "agent_sessions"
 
-class Requirement(Base):
+class Requirement():
     __tablename__ = "requirements"

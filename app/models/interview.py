@@ -8,7 +8,7 @@ class InterviewType(enum.Enum):
     TEXT = "text"
     AUDIO = "audio"
 
-class Interview(Base):
+class Interview():
     __tablename__ = "interviews"
 
     id = Column(Integer, primary_key=True, index=True)
