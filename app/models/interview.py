@@ -4,11 +4,13 @@ from sqlalchemy.orm import relationship
 from app.core.database import Base
 import enum
 
+
 class InterviewType(enum.Enum):
     TEXT = "text"
     AUDIO = "audio"
 
-class Interview():
+
+class Interview:
     __tablename__ = "interviews"
 
     id = Column(Integer, primary_key=True, index=True)

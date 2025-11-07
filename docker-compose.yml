@@ -4,6 +4,9 @@ services:
     container_name: api-requirements
     ports:
       - "8080:8080"
+    volumes:
+      - ./:/app
+      - api_venv:/app/.venv
     depends_on:
       - postgres
 
@@ -21,5 +24,6 @@ services:
 
 volumes:
   postgres_data:
+  api_venv:
 
 

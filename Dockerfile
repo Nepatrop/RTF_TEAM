@@ -9,8 +9,6 @@ COPY uv.lock pyproject.toml /app/
 RUN --mount=type=cache,target=/root/.cache/uv \
   uv sync --frozen
 
-COPY . /app
-
 ENV PATH="/app/.venv/bin:$PATH"
 
 CMD ["python", "api_start.py"]

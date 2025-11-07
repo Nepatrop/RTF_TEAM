@@ -1,6 +1,7 @@
 from app.core.database import Base
 import enum
 
+
 class SessionStatus(enum.Enum):
     PROCESSING = "processing"
     QUESTION = "question"
@@ -8,8 +9,10 @@ class SessionStatus(enum.Enum):
     ERROR = "error"
     CANCELLED = "cancelled"
 
-class AgentSession():
+
+class AgentSession:
     __tablename__ = "agent_sessions"
 
-class Requirement():
+
+class Requirement:
     __tablename__ = "requirements"
