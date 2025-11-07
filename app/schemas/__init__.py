@@ -1,4 +1,4 @@
-from .user import UserBase, UserCreate
+from .user import UserBase, UserCreate, UserUpdate
 from .auth import Token, RefreshTokenCreate, RefreshToken, Login, Register
 from .error import RequestValidationError, ErrorResponse
 
@@ -9,6 +9,6 @@ _all_ = (
     "RefreshToken",
     "UserBase",
     "UserCreate",
-    "RequestValidationError",
+    "UserUpdate" "RequestValidationError",
     "ErrorResponse",
 )

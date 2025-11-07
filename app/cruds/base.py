@@ -30,7 +30,7 @@ class BaseCRUD(Generic[T]):
         return obj
 
     @classmethod
-    async def update(cls, session: AsyncSession, _id: int, upd_obj: dict) -> T:
+    async def update(cls, session: AsyncSession, _id: int, upd_obj: BaseModel) -> T:
         obj = await cls.get_by_id(session, _id)
         for key, value in upd_obj.items():
             setattr(obj, key, value)
