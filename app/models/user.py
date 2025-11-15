@@ -19,3 +19,5 @@ class User(Base):
     refresh_tokens = relationship(
         "RefreshToken", back_populates="user", lazy="selectin"
     )
+
+    projects = relationship("Project", back_populates="user", lazy="selectin")
