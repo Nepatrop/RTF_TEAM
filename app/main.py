@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import logging
 
 from app.core.config import settings
-from app.api import auth, user
+from app.api import auth, user, projects
 from app.exceptions import init_exception_handlers
 
 app = FastAPI(title=settings.PROJECT_NAME)
@@ -21,7 +21,7 @@ init_exception_handlers(app)
 # Маршруты
 app.include_router(auth.router)
 app.include_router(user.router)
-# app.include_router(projects.router, prefix="/projects", tags=["projects"])
+app.include_router(projects.router)
 # app.include_router(interviews.router, prefix="/interviews", tags=["interviews"])
 # app.include_router(agent.router, prefix="/agent", tags=["agent"])
 

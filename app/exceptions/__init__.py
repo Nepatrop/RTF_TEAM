@@ -23,7 +23,7 @@ def init_exception_handlers(app: FastAPI):
             status_code=404,
             content={
                 "message": "Error: Not Found Exception",
-                "detail": f"{exc.model.title()} with {exc.field}={exc.value} not found",
+                "detail": f"{exc.model.title()[:-1]} with {exc.field} {exc.value} not found",
             },
         )
 
