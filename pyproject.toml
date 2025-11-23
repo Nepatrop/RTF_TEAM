@@ -16,4 +16,6 @@ dependencies = [
     "uvicorn>=0.38.0",
     "bcrypt>=5.0.0",
     "pre-commit>=4.3.0",
+    "aiofiles>=25.1.0",
+    "python-multipart>=0.0.20",
 ]

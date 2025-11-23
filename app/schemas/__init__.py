@@ -9,6 +9,14 @@ from .project import (
     ProjectsGet,
 )
 
+from .interview import (
+    InterviewBase,
+    InterviewUpdate,
+    InterviewsGet,
+    InterviewShallow,
+    InterviewCreate
+)
+
 _all_ = (
     "Register",
     "Login",
@@ -23,4 +31,9 @@ _all_ = (
     "ProjectUpdate",
     "ProjectCreateInternal",
     "ProjectsGet",
+    "InterviewBase",
+    "InterviewUpdate",
+    "InterviewsGet",
+    "InterviewShallow",
+    "InterviewCreate",
 )

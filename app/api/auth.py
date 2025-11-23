@@ -76,7 +76,7 @@ async def register(payload: schemas.Register, session: AsyncSession = Depends(ge
 async def login(payload: schemas.Login, session: AsyncSession = Depends(get_db)):
     user = await UserCRUD.get_by_email(session, payload.email)
     if not user or not verify_password(payload.password, user.hashed_password):
-        raise HTTPException(status_code=400, detail="Incorrect email or password")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Incorrect email or password")
 
     return await _create_tokens(session, user)
 
@@ -115,7 +115,7 @@ async def refresh_token(
 ):
     token = await RefreshTokenCRUD.get_by_token(session, payload.refresh_token)
     if not token:
-        raise HTTPException(status_code=400, detail="Invalid refresh token")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid refresh token")
 
     user = await UserCRUD.get_by_id(session, token.user_id)
 

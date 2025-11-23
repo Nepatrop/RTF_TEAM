@@ -1,11 +1,11 @@
-from fastapi import APIRouter, Depends, Query, Path
+from fastapi import status, APIRouter, Depends, Query, Path, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List, Optional
+from typing import Optional
 from pydantic import PositiveInt
 
 from app.core.database import get_db
 from app import schemas
-from app.models.user import User as UserORM
+from app.models import User as UserORM
 from app.dependencies import get_current_user
 from app.cruds import ProjectCRUD
 
@@ -66,6 +66,7 @@ async def create_project(
     response_model=schemas.ProjectBase,
     responses={
         401: {"description": "Unauthorized", "model": schemas.ErrorResponse},
+        403: {"description": "Forbidden", "model": schemas.ErrorResponse},
         404: {"description": "Not found", "model": schemas.ErrorResponse},
     },
 )
@@ -75,6 +76,8 @@ async def get_project_by_id(
     session: AsyncSession = Depends(get_db),
 ):
     project = await ProjectCRUD.get_by_id(session, project_id)
+    if project.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not owner of this project")
     return project
 
 
@@ -85,6 +88,7 @@ async def get_project_by_id(
     responses={
         400: {"description": "Bad Request", "model": schemas.ErrorResponse},
         401: {"description": "Unauthorized", "model": schemas.ErrorResponse},
+        403: {"description": "Forbidden", "model": schemas.ErrorResponse},
         404: {"description": "Not found", "model": schemas.ErrorResponse},
     },
 )
@@ -95,8 +99,11 @@ async def update_project_by_id(
     session: AsyncSession = Depends(get_db),
 ):
     update_data = payload.model_dump(exclude_unset=True)
-    project = await ProjectCRUD.update(session, project_id, update_data)
-    return project
+    project = await ProjectCRUD.get_by_id(session, project_id)
+    if project.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not owner of this project")
+    upd_project = await ProjectCRUD.update(session, project, update_data)
+    return upd_project
 
 
 @router.delete(
@@ -105,6 +112,7 @@ async def update_project_by_id(
     response_model=None,
     responses={
         401: {"description": "Unauthorized", "model": schemas.ErrorResponse},
+        403: {"description": "Forbidden", "model": schemas.ErrorResponse},
         404: {"description": "Not found", "model": schemas.ErrorResponse},
     },
 )
@@ -113,4 +121,7 @@ async def delete_project_by_id(
     current_user: UserORM = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ):
+    project = await ProjectCRUD.get_by_id(session, project_id)
+    if project.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not owner of this project")
     await ProjectCRUD.remove(session, project_id)
