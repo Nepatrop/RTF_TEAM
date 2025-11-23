@@ -11,4 +11,4 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 ENV PATH="/app/.venv/bin:$PATH"
 
-CMD ["python", "api_start.py"]
+CMD ["uv", "run", "api_start.py"]

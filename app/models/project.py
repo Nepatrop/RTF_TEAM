@@ -18,3 +18,4 @@ class Project(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     user = relationship("User", back_populates="projects", lazy="selectin")
+    interviews = relationship("Interview", back_populates="project", lazy="selectin")

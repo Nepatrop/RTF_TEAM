@@ -44,5 +44,5 @@ async def update_current_user(
     session: AsyncSession = Depends(get_db),
 ):
     update_data = payload.model_dump(exclude_unset=True)
-    await UserCRUD.update(session, current_user.id, update_data)
+    await UserCRUD.update(session, current_user, update_data)
     return current_user
