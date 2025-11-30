@@ -1,6 +1,3 @@
-from .files import save_file, get_type_by_file
+from .files import save_file_with_meta
 
-__all__ = (
-    'save_file',
-    'get_type_by_file'
-)
+__all__ = "save_file_with_meta"

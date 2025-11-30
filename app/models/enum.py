@@ -3,8 +3,8 @@ import enum
 
 class InterviewTypeEnum(enum.Enum):
     TEXT = "text"
-    TEXT_FILE = "text_file"
     AUDIO = "audio"
+
 
 class InterviewStatusEnum(enum.Enum):
     UPLOADED = "uploaded"

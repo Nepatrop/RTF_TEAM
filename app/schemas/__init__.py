@@ -14,7 +14,8 @@ from .interview import (
     InterviewUpdate,
     InterviewsGet,
     InterviewShallow,
-    InterviewCreate
+    InterviewCreate,
+    InterviewFileCreate,
 )
 
 _all_ = (
@@ -36,4 +37,5 @@ _all_ = (
     "InterviewsGet",
     "InterviewShallow",
     "InterviewCreate",
+    "InterviewFileCreate",
 )
