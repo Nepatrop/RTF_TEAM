@@ -1,9 +1,50 @@
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException, Depends
+from fastapi import (
+    status,
+    APIRouter,
+    WebSocket,
+    WebSocketDisconnect,
+    HTTPException,
+    Depends,
+)
 from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import schemas
+from app.cruds import InterviewCRUD
+from app.models import User as UserORM, SessionCallbackEnum
+from app.dependencies import get_current_user
+from app.services import handle_questions_webhook, handle_final_result_webhook
 from app.core.database import get_db
 
-router = APIRouter()
+router = APIRouter(prefix="/agent", tags=["agent"])
+
+
+@router.post(
+    "/webhook",
+    status_code=200,
+    response_model=None,
+    responses={
+        400: {"description": "Bad Request", "model": schemas.ErrorResponse},
+        401: {"description": "Unauthorized", "model": schemas.ErrorResponse},
+        422: {
+            "description": "Error: Validation Error",
+            "model": schemas.RequestValidationError,
+        },
+    },
+)
+async def webhook_update_session(
+    payload: schemas.AgentCallback,
+    session: AsyncSession = Depends(get_db),
+):
+    match payload.event:
+        case SessionCallbackEnum.QUESTIONS:
+            await handle_questions_webhook(payload.data, session)
+        case SessionCallbackEnum.FINAL_RESULT:
+            await handle_final_result_webhook(payload.data, session)
+        case SessionCallbackEnum.PROJECT_UPDATED:
+            pass
+
+    return {"status": "ok"}
 
 
 @router.websocket("/ws/agent/sessions/{session_id}")

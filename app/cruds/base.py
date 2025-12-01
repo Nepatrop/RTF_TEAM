@@ -30,7 +30,7 @@ class BaseCRUD(Generic[T]):
         return obj
 
     @classmethod
-    async def update(cls, session: AsyncSession, obj: T, upd_obj: BaseModel) -> T:
+    async def update(cls, session: AsyncSession, obj: T, upd_obj: dict) -> T:
         for key, value in upd_obj.items():
             setattr(obj, key, value)
         session.add(obj)

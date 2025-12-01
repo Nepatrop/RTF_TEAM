@@ -30,6 +30,9 @@ class Interview(Base):
         lazy="selectin",
         cascade="all, delete-orphan",
     )
+    sessions = relationship(
+        "AgentSessions", back_populates="interview", cascade="all, delete-orphan"
+    )
 
 
 class InterviewFile(Base):

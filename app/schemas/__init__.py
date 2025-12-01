@@ -18,6 +18,16 @@ from .interview import (
     InterviewFileCreate,
 )
 
+from .session import (
+    AgentCallback,
+    QuestionsData,
+    FinalResultData,
+    ProjectUpdatedData,
+    AgentSessionCreate,
+    AgentSessionUpdate,
+    AgentSessionMessageCreate,
+)
+
 _all_ = (
     "Register",
     "Login",
@@ -38,4 +48,10 @@ _all_ = (
     "InterviewShallow",
     "InterviewCreate",
     "InterviewFileCreate",
+    "AgentCallback",
+    "QuestionsData",
+    "FinalResultData",
+    "ProjectUpdatedData",
+    "AgentSessionUpdate",
+    "AgentSessionMessageCreate",
 )

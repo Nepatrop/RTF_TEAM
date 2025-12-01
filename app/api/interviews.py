@@ -6,7 +6,6 @@ from fastapi import (
     Path,
     UploadFile,
     HTTPException,
-    Form,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, List
@@ -89,7 +88,7 @@ async def upload_text_interview(
     interview_data = schemas.InterviewCreate(
         name=f"Interview №{existing_count + 1}",
         type=InterviewTypeEnum.TEXT,
-        status=InterviewStatusEnum.UPLOADED,
+        status=InterviewStatusEnum.CREATED,
         project_id=project_id,
     )
     interview = await InterviewCRUD.create(session, interview_data)
