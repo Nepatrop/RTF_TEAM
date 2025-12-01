@@ -1,10 +1,10 @@
 from sqlalchemy import select, or_, func, desc, case
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List, Tuple
-
+from typing import List, Tuple, Optional
 from app.cruds import BaseCRUD
 from app.models import Project as ProjectORM
 from app.models import Interview as InterviewORM
+
 
 class InterviewCRUD(BaseCRUD):
     model = InterviewORM
@@ -17,7 +17,7 @@ class InterviewCRUD(BaseCRUD):
         search: str,
         offset: int = 0,
         limit: int = 10,
-    ) -> Tuple[List[ProjectORM], int]:
+    ) -> Tuple[List[InterviewORM], int]:
         base_query = select(cls.model).where(cls.model.project_id == project.id)
 
         count_query = select(func.count()).select_from(base_query.subquery())
@@ -26,9 +26,7 @@ class InterviewCRUD(BaseCRUD):
         priority = case((cls.model.name.ilike(f"%{search}%"), 1), else_=0)
 
         paginated_query = (
-            base_query.order_by(
-                desc(priority), cls.model.id.desc()
-            )
+            base_query.order_by(desc(priority), cls.model.id.desc())
             .offset(offset)
             .limit(limit)
         )
@@ -40,10 +38,20 @@ class InterviewCRUD(BaseCRUD):
 
     @classmethod
     async def count_by_project(
-            cls,
-            session: AsyncSession,
-            project: ProjectORM,
-    )-> int:
-        query = select(func.count(cls.model.id)).where(cls.model.project_id == project.id)
+        cls,
+        session: AsyncSession,
+        project: ProjectORM,
+    ) -> int:
+        query = select(func.count(cls.model.id)).where(
+            cls.model.project_id == project.id
+        )
         result = await session.execute(query)
         return result.scalar()
+
+    @classmethod
+    async def get_by_external_id(
+        cls, session: AsyncSession, external_id: str
+    ) -> Optional[InterviewORM]:
+        query = select(cls.model).where(cls.model.external_id == external_id)
+        result = await session.execute(query)
+        return result.scalar_one_or_none()

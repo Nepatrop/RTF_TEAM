@@ -50,6 +50,7 @@ class InterviewBase(InterviewShallow):
 
 class InterviewUpdate(BaseModel):
     name: Optional[str] = None
+    status: Optional[InterviewStatusEnum] = None
     external_id: Optional[str] = None
 
 
