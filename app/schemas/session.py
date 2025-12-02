@@ -55,7 +55,6 @@ class AgentSessionMessageCreate(BaseModel):
     role: SessionMessageRoleEnum
     content: str
     message_type: SessionMessageTypeEnum
-    iteration_number: int
 
 
 class ContextQuestions(BaseModel):
