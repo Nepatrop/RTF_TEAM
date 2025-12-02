@@ -26,6 +26,10 @@ from .session import (
     AgentSessionCreate,
     AgentSessionUpdate,
     AgentSessionMessageCreate,
+    ContextQuestions,
+    SessionStartRequest,
+    SessionAnswerRequest,
+    SessionStatusResponse,
 )
 
 _all_ = (
@@ -54,4 +58,8 @@ _all_ = (
     "ProjectUpdatedData",
     "AgentSessionUpdate",
     "AgentSessionMessageCreate",
+    "ContextQuestions",
+    "SessionStartRequest",
+    "SessionAnswerRequest",
+    "SessionStatusResponse",
 )

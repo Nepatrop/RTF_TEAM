@@ -8,12 +8,13 @@ from fastapi import (
 )
 from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
+from typing import Literal
 
 from app import schemas
-from app.cruds import InterviewCRUD
-from app.models import User as UserORM, SessionCallbackEnum
-from app.dependencies import get_current_user
-from app.services import handle_questions_webhook, handle_final_result_webhook
+from app.cruds import InterviewCRUD, AgentSessionsCRUD, AgentSessionMessageCRUD
+from app.models import User as UserORM, SessionCallbackEnum, SessionStatusEnum
+from app.dependencies import get_current_user, get_agent
+from app.services import handle_questions_webhook, handle_final_result_webhook, AgentService
 from app.core.database import get_db
 
 router = APIRouter(prefix="/agent", tags=["agent"])
@@ -58,24 +59,211 @@ async def websocket_agent_session(websocket: WebSocket, session_id: int):
         pass
 
 
-@router.post("/sessions/start")
-async def start_agent_session(db: Session = Depends(get_db)):
-    raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED)
+@router.post(
+    "/sessions/start",
+    status_code=201,
+    response_model=schemas.SessionStatusResponse,
+    responses={
+        400: {"description": "Bad Request", "model": schemas.ErrorResponse},
+        401: {"description": "Unauthorized", "model": schemas.ErrorResponse},
+        404: {"description": "Not found", "model": schemas.ErrorResponse},
+        500: {"description": "Internal Server Error", "model": schemas.ErrorResponse},
+    },
+)
+async def start_agent_session(
+    payload: schemas.SessionStartRequest,
+    current_user: UserORM = Depends(get_current_user),
+    agent: AgentService = Depends(get_agent),
+    session: AsyncSession = Depends(get_db),
+):
+    interview = await InterviewCRUD.get_by_external_id(session, payload.project_id)
+    if not interview:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Interview not found"
+        )
+
+    if interview.project.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not owner of this project",
+        )
+
+    context_data = {
+        "task": payload.context_questions.task,
+        "goal": payload.context_questions.goal,
+        "value": payload.context_questions.value,
+    }
+
+    try:
+        await agent.health_check()
+        agent_response = await agent.create_interview_session(
+            payload.project_id, context_data
+        )
+    except HTTPException as e:
+        raise HTTPException(
+            status_code=e.status_code,
+            detail=f"Failed to create session on agent: {e.detail}",
+        )
+
+    external_session_id = agent_response.get("session_id")
+    if not external_session_id:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Agent did not return session_id",
+        )
+
+    session_data = schemas.AgentSessionCreate(
+        interview_id=interview.id,
+        external_session_id=external_session_id,
+        status=SessionStatusEnum.PROCESSING,
+        current_iteration=1,
+    )
+    db_session = await AgentSessionsCRUD.create(session, session_data)
+
+    await AgentSessionsCRUD.update(
+        session, db_session, {"context_questions": context_data}
+    )
+
+    return schemas.SessionStatusResponse(
+        session_id=external_session_id,
+        status=SessionStatusEnum.PROCESSING,
+        current_iteration=1,
+    )
 
 
-@router.post("/sessions/{session_id}/answer")
-async def answer_agent_question(session_id: int, db: Session = Depends(get_db)):
-    raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED)
+@router.post(
+    "/sessions/{session_id}/answers",
+    status_code=200,
+    response_model=dict,
+    responses={
+        400: {"description": "Bad Request", "model": schemas.ErrorResponse},
+        401: {"description": "Unauthorized", "model": schemas.ErrorResponse},
+        404: {"description": "Not found", "model": schemas.ErrorResponse},
+        500: {"description": "Internal Server Error", "model": schemas.ErrorResponse},
+    },
+)
+async def submit_text_answers(
+    session_id: str,
+    payload: schemas.SessionAnswerRequest,
+    current_user: UserORM = Depends(get_current_user),
+    agent: AgentService = Depends(get_agent),
+    session: AsyncSession = Depends(get_db),
+):
+    db_session = await AgentSessionsCRUD.get_by_external_id(session, session_id)
+    if not db_session:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Session not found"
+        )
+
+    if db_session.interview.project.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not owner of this project",
+        )
+
+    try:
+        await agent.health_check()
+        await agent.submit_answers(session_id, payload.answers)
+    except HTTPException as e:
+        raise HTTPException(
+            status_code=e.status_code, detail=f"Failed to submit answers: {e.detail}"
+        )
+
+    answer_message = schemas.AgentSessionMessageCreate(
+        session_id=db_session.id,
+        role="USER",
+        content=payload.answers,
+        message_type="ANSWER",
+    )
+    await AgentSessionMessageCRUD.create(session, answer_message)
+
+    return {"status": "accepted"}
 
 
-@router.post("/sessions/{session_id}/cancel")
-async def cancel_agent_session(session_id: int, db: Session = Depends(get_db)):
-    return {"message": "Cancel agent session endpoint"}
+@router.post(
+    "/sessions/{session_id}/cancel",
+    status_code=200,
+    response_model=dict,
+    responses={
+        401: {"description": "Unauthorized", "model": schemas.ErrorResponse},
+        404: {"description": "Not found", "model": schemas.ErrorResponse},
+        500: {"description": "Internal Server Error", "model": schemas.ErrorResponse},
+    },
+)
+async def cancel_session(
+    session_id: str,
+    current_user: UserORM = Depends(get_current_user),
+    agent: AgentService = Depends(get_agent),
+    session: AsyncSession = Depends(get_db),
+):
+    db_session = await AgentSessionsCRUD.get_by_external_id(session, session_id)
+    if not db_session:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Session not found"
+        )
+
+    if db_session.interview.project.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not owner of this project",
+        )
+
+    try:
+        await agent.health_check()
+        await agent.cancel_session(session_id)
+    except HTTPException as e:
+        raise HTTPException(
+            status_code=e.status_code, detail=f"Failed to cancel session: {e.detail}"
+        )
+
+    await AgentSessionsCRUD.update(
+        session, db_session, {"status": SessionStatusEnum.CANCELLED}
+    )
+
+    return {"status": "cancelled"}
 
 
-@router.get("/sessions/{session_id}")
-async def get_agent_session(session_id: int, db: Session = Depends(get_db)):
-    raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED)
+@router.get(
+    "/sessions/{session_id}",
+    status_code=200,
+    response_model=schemas.SessionStatusResponse,
+    responses={
+        401: {"description": "Unauthorized", "model": schemas.ErrorResponse},
+        404: {"description": "Not found", "model": schemas.ErrorResponse},
+        500: {"description": "Internal Server Error", "model": schemas.ErrorResponse},
+    },
+)
+async def get_session_status(
+    session_id: str,
+    current_user: UserORM = Depends(get_current_user),
+    agent: AgentService = Depends(get_agent),
+    session: AsyncSession = Depends(get_db),
+):
+    db_session = await AgentSessionsCRUD.get_by_external_id(session, session_id)
+    if not db_session:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Session not found"
+        )
+
+    if db_session.interview.project.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not owner of this project",
+        )
+
+    questions = [
+        msg.content
+        for msg in db_session.messages
+        if msg.iteration_number == db_session.current_iteration
+        and msg.message_type.value == "question"
+    ]
+
+    return schemas.SessionStatusResponse(
+        session_id=session_id,
+        status=db_session.status,
+        current_iteration=db_session.current_iteration,
+        questions=questions if questions else None,
+    )
 
 
 @router.post("/webhook/agent/sessions/update")

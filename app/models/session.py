@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Enum
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Enum, JSON
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 
@@ -14,6 +14,7 @@ class AgentSessions(Base):
     external_session_id = Column(String, unique=True, nullable=False)
     status = Column(Enum(SessionStatusEnum), nullable=False)
     current_iteration = Column(Integer, nullable=False, default=1)
+    context_questions = Column(JSON, nullable=True)
 
     interview = relationship("Interview", back_populates="sessions")
     messages = relationship(
