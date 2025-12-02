@@ -58,3 +58,81 @@ class AgentService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Agent did not delete project: {data}",
             )
+
+    async def create_interview_session(
+        self, project_id: str, context_questions: Dict[str, str]
+    ) -> Dict:
+        data = {
+            "project_id": project_id,
+            "context_questions": context_questions,
+        }
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{self.url}/api/v1/interview-session", json=data
+                )
+                if response.status_code != 200:
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail=f"Agent failed to create session: {response.text}",
+                    )
+        except httpx.HTTPError as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"{e}"
+            )
+        return response.json()
+
+    async def get_session_status(self, session_id: str) -> Dict:
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f"{self.url}/api/v1/interview-session/{session_id}"
+                )
+                if response.status_code != 200:
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail="Failed to get session status",
+                    )
+        except httpx.HTTPError as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"{e}"
+            )
+        return response.json()
+
+    async def submit_answers(
+        self, session_id: str, answers: str
+    ) -> Dict:
+        data = {"answers": answers}
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{self.url}/api/v1/interview-session/{session_id}/answers",
+                    json=data,
+                )
+                if response.status_code != 200:
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail="Failed to submit answers",
+                    )
+        except httpx.HTTPError as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"{e}"
+            )
+        return response.json()
+
+    async def cancel_session(self, session_id: str) -> Dict:
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{self.url}/api/v1/interview-session/{session_id}/cancel"
+                )
+                if response.status_code != 200:
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail="Failed to cancel session",
+                    )
+        except httpx.HTTPError as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"{e}"
+            )
+        return response.json()

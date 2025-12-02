@@ -56,3 +56,28 @@ class AgentSessionMessageCreate(BaseModel):
     content: str
     message_type: SessionMessageTypeEnum
     iteration_number: int
+
+
+class ContextQuestions(BaseModel):
+    task: str
+    goal: str
+    value: str
+
+
+class SessionStartRequest(BaseModel):
+    project_id: str
+    context_questions: ContextQuestions
+
+
+class SessionAnswerRequest(BaseModel):
+    answers: str
+
+
+class SessionStatusResponse(BaseModel):
+    session_id: str
+    status: SessionStatusEnum
+    current_iteration: int
+    questions: Optional[List[str]] = None
+
+    class Config:
+        from_attributes = True
