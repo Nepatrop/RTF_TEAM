@@ -24,6 +24,7 @@ app.include_router(user.router)
 app.include_router(projects.router)
 app.include_router(interviews.router)
 app.include_router(agent.router)
+app.include_router(agent.ws_router)
 
 logging.basicConfig(
     level=logging.INFO,

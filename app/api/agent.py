@@ -12,12 +12,13 @@ from typing import Literal
 
 from app import schemas
 from app.cruds import InterviewCRUD, AgentSessionsCRUD, AgentSessionMessageCRUD
-from app.models import User as UserORM, SessionCallbackEnum, SessionStatusEnum
+from app.models import User as UserORM, SessionCallbackEnum, SessionStatusEnum, SessionMessageTypeEnum, SessionMessageRoleEnum
 from app.dependencies import get_current_user, get_agent
 from app.services import handle_questions_webhook, handle_final_result_webhook, AgentService
-from app.core.database import get_db
+from app.core.database import get_db, session as get_session_maker
 
 router = APIRouter(prefix="/agent", tags=["agent"])
+ws_router = APIRouter(tags=["websocket"])
 
 
 @router.post(
@@ -48,15 +49,64 @@ async def webhook_update_session(
     return {"status": "ok"}
 
 
-@router.websocket("/ws/agent/sessions/{session_id}")
-async def websocket_agent_session(websocket: WebSocket, session_id: int):
+@ws_router.websocket("/ws/sessions/{session_id}")
+async def websocket_agent_session(websocket: WebSocket, session_id: str):
     await websocket.accept()
     try:
         while True:
             data = await websocket.receive_text()
-            await websocket.send_text(f"Message received: {data}")
+            
+            if data == "ping":
+                try:
+                    async with get_session_maker() as db_session:
+                        db_session_obj = await AgentSessionsCRUD.get_by_external_id(
+                            db_session, session_id
+                        )
+                        
+                        if not db_session_obj:
+                            await websocket.send_json({
+                                "status": "error",
+                                "message": "Session not found"
+                            })
+                            continue
+                        
+                        questions = [
+                            msg.content
+                            for msg in db_session_obj.messages
+                            if msg.message_type == SessionMessageTypeEnum.QUESTION
+                        ]
+                        
+                        await websocket.send_json({
+                            "status": "ok",
+                            "session_id": session_id,
+                            "session_status": db_session_obj.status.value,
+                            "current_iteration": db_session_obj.current_iteration,
+                            "questions": questions if questions else [],
+                        })
+                except Exception as e:
+                    await websocket.send_json({
+                        "status": "error",
+                        "message": f"Server error: {str(e)}"
+                    })
+            elif data == "disconnect":
+                await websocket.close()
+                break
+            else:
+                await websocket.send_json({
+                    "status": "error",
+                    "message": f"Unknown command: {data}. Use 'ping' or 'disconnect'"
+                })
+                
     except WebSocketDisconnect:
         pass
+    except Exception as e:
+        try:
+            await websocket.send_json({
+                "status": "error",
+                "message": str(e)
+            })
+        except:
+            pass
 
 
 @router.post(
@@ -171,9 +221,9 @@ async def submit_text_answers(
 
     answer_message = schemas.AgentSessionMessageCreate(
         session_id=db_session.id,
-        role="USER",
+        role=SessionMessageRoleEnum.USER,
         content=payload.answers,
-        message_type="ANSWER",
+        message_type=SessionMessageTypeEnum.ANSWER,
     )
     await AgentSessionMessageCRUD.create(session, answer_message)
 
@@ -254,8 +304,7 @@ async def get_session_status(
     questions = [
         msg.content
         for msg in db_session.messages
-        if msg.iteration_number == db_session.current_iteration
-        and msg.message_type.value == "question"
+        if msg.message_type == SessionMessageTypeEnum.QUESTION
     ]
 
     return schemas.SessionStatusResponse(
@@ -266,6 +315,6 @@ async def get_session_status(
     )
 
 
-@router.post("/webhook/agent/sessions/update")
+@router.post("/webhook/sessions/update")
 async def webhook_agent_update():
     return {"message": "Webhook endpoint"}
