@@ -88,7 +88,7 @@ async def upload_text_interview(
     interview_data = schemas.InterviewCreate(
         name=f"Interview №{existing_count + 1}",
         type=InterviewTypeEnum.TEXT,
-        status=InterviewStatusEnum.CREATED,
+        status=InterviewStatusEnum.ACTIVE,
         project_id=project_id,
     )
     interview = await InterviewCRUD.create(session, interview_data)
@@ -127,29 +127,6 @@ async def upload_text_interview(
     await InterviewCRUD.update(session, upd_data, interview)
 
     return interview
-
-
-@router.post(
-    "/projects/{project_id}/upload-audio",
-    response_model=schemas.InterviewBase,
-    responses={
-        400: {"description": "Invalid file format", "model": schemas.ErrorResponse},
-        401: {"description": "Unauthorized", "model": schemas.ErrorResponse},
-        403: {
-            "description": "You are not owner of this project",
-            "model": schemas.ErrorResponse,
-        },
-        404: {"description": "Not found", "model": schemas.ErrorResponse},
-    },
-)
-async def upload_audio_interview(
-    project_id: int = Path(..., description="The identifier of project"),
-    files: List[UploadFile] = Depends(get_audio_files),
-    current_user: UserORM = Depends(get_current_user),
-    session: AsyncSession = Depends(get_db),
-):
-    # TODO: ждем метод в сервисе агента по загрузке audio
-    pass
 
 
 @router.get(
@@ -240,3 +217,33 @@ async def delete_interview_by_id(
             detail=f"Failed to delete project on agent: {e.detail}",
         )
     await InterviewCRUD.remove(session, interview)
+
+
+@router.get(
+    "/{interview_id}/session",
+    status_code=200,
+    response_model=schemas.AgentSessionBase,
+    responses={
+        401: {"description": "Unauthorized", "model": schemas.ErrorResponse},
+        403: {"description": "Forbidden", "model": schemas.ErrorResponse},
+        404: {"description": "Not found", "model": schemas.ErrorResponse},
+    },
+)
+async def get_session_data_by_interview_id(
+    interview_id: PositiveInt = Path(..., description="The identifier of interview"),
+    current_user: UserORM = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+):
+    interview = await InterviewCRUD.get_by_id(session, interview_id)
+    if interview.project.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not owner of project this interview",
+        )
+    interview_session = interview.session
+    if not interview_session:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Session not found",
+        )
+    return interview_session

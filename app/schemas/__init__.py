@@ -30,6 +30,7 @@ from .session import (
     SessionStartRequest,
     SessionAnswerRequest,
     SessionStatusResponse,
+    AgentSessionBase,
 )
 
 _all_ = (
@@ -62,4 +63,5 @@ _all_ = (
     "SessionStartRequest",
     "SessionAnswerRequest",
     "SessionStatusResponse",
+    "AgentSessionBase",
 )

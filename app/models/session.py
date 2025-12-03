@@ -10,15 +10,20 @@ class AgentSessions(Base):
     __tablename__ = "agent_sessions"
 
     id = Column(Integer, primary_key=True, index=True)
-    interview_id = Column(Integer, ForeignKey("interviews.id"), nullable=False)
+    interview_id = Column(
+        Integer, ForeignKey("interviews.id"), unique=True, nullable=False
+    )
     external_session_id = Column(String, unique=True, nullable=False)
     status = Column(Enum(SessionStatusEnum), nullable=False)
     current_iteration = Column(Integer, nullable=False, default=1)
     context_questions = Column(JSON, nullable=True)
 
-    interview = relationship("Interview", back_populates="sessions")
+    interview = relationship("Interview", back_populates="session")
     messages = relationship(
-        "AgentSessionMessage", back_populates="session", cascade="all, delete-orphan"
+        "AgentSessionMessage",
+        back_populates="session",
+        cascade="all, delete-orphan",
+        lazy="selectin",
     )
 
 
@@ -30,7 +35,6 @@ class AgentSessionMessage(Base):
     role = Column(Enum(SessionMessageRoleEnum), nullable=False)
     content = Column(String, nullable=False)
     message_type = Column(Enum(SessionMessageTypeEnum), nullable=False)
-    iteration_number = Column(Integer, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     session = relationship("AgentSessions", back_populates="messages")

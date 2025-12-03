@@ -32,12 +32,8 @@ def upgrade() -> None:
         sa.Column(
             "status",
             sa.Enum(
-                "CREATED",
                 "ACTIVE",
-                "QUESTION",
-                "DONE",
-                "ERROR",
-                "CANCELLED",
+                "FINISHED",
                 name="interviewstatusenum",
             ),
             nullable=False,

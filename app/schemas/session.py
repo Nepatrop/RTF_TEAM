@@ -57,6 +57,13 @@ class AgentSessionMessageCreate(BaseModel):
     message_type: SessionMessageTypeEnum
 
 
+class AgentSessionMessageShallow(BaseModel):
+    role: SessionMessageRoleEnum
+    message_type: SessionMessageTypeEnum
+    content: str
+    created_at: datetime
+
+
 class ContextQuestions(BaseModel):
     task: str
     goal: str
@@ -64,7 +71,7 @@ class ContextQuestions(BaseModel):
 
 
 class SessionStartRequest(BaseModel):
-    project_id: str
+    project_id: int
     context_questions: ContextQuestions
 
 
@@ -73,10 +80,21 @@ class SessionAnswerRequest(BaseModel):
 
 
 class SessionStatusResponse(BaseModel):
-    session_id: str
+    id: int
+    external_session_id: str
     status: SessionStatusEnum
     current_iteration: int
-    questions: Optional[List[str]] = None
+    messages: Optional[List[AgentSessionMessageShallow]] = []
+
+    class Config:
+        from_attributes = True
+
+
+class AgentSessionBase(BaseModel):
+    id: int
+    external_session_id: str
+    status: SessionStatusEnum
+    current_iteration: int
 
     class Config:
         from_attributes = True

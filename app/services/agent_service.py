@@ -59,9 +59,13 @@ class AgentService:
                 detail=f"Agent did not delete project: {data}",
             )
 
-    async def create_interview_session(
-        self, project_id: str, context_questions: Dict[str, str]
-    ) -> Dict:
+    async def create_interview_session(self, project_id: str, questions: List) -> Dict:
+
+        context_questions = {
+            "task": questions[0],
+            "goal": questions[1],
+            "value": questions[2],
+        }
         data = {
             "project_id": project_id,
             "context_questions": context_questions,
@@ -100,13 +104,13 @@ class AgentService:
         return response.json()
 
     async def submit_answers(
-        self, session_id: str, answers: str
+        self, session_id: str, iteration_number: str, answers: str
     ) -> Dict:
         data = {"answers": answers}
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.post(
-                    f"{self.url}/api/v1/interview-session/{session_id}/answers",
+                    f"{self.url}/api/v1/interview-session/{session_id}/{iteration_number}/answers",
                     json=data,
                 )
                 if response.status_code != 200:

@@ -26,7 +26,8 @@ async def handle_questions_webhook(data: schemas.QuestionsData, session: AsyncSe
         )
         agent_session = await AgentSessionsCRUD.create(session, session_agent_data)
     agent_session_id = agent_session.id
-
+    if data.iteration_number < agent_session.current_iteration:
+        return
     upd_agent_session_data = {
         "status": SessionStatusEnum.PROCESSING,
         "current_iteration": data.iteration_number,
@@ -39,7 +40,6 @@ async def handle_questions_webhook(data: schemas.QuestionsData, session: AsyncSe
             role=SessionMessageRoleEnum.AGENT,
             content=question_text,
             message_type=SessionMessageTypeEnum.QUESTION,
-            iteration_number=data.iteration_number,
         )
         await AgentSessionMessageCRUD.create(session, agent_message_data)
 
@@ -47,10 +47,6 @@ async def handle_questions_webhook(data: schemas.QuestionsData, session: AsyncSe
         "status": SessionStatusEnum.WAITING_FOR_ANSWERS,
     }
     await AgentSessionsCRUD.update(session, agent_session, session_data)
-    interview_data = {
-        "status": InterviewStatusEnum.QUESTION,
-    }
-    await InterviewCRUD.update(session, interview, interview_data)
 
 
 async def handle_final_result_webhook(
@@ -58,7 +54,7 @@ async def handle_final_result_webhook(
 ):
     agent_session = await AgentSessionsCRUD.get_by_external_id(session, data.session_id)
     interview = await InterviewCRUD.get_by_external_id(session, data.project_id)
-    if not agent_session or interview:
+    if not agent_session or not interview:
         return
     agent_session_id = agent_session.id
 
@@ -67,7 +63,6 @@ async def handle_final_result_webhook(
             "status": SessionStatusEnum.ERROR,
         }
         await AgentSessionsCRUD.update(session, agent_session, agent_session_data)
-        interview_status = InterviewStatusEnum.ERROR
     else:
 
         agent_session_message_data = schemas.AgentSessionMessageCreate(
@@ -75,13 +70,13 @@ async def handle_final_result_webhook(
             role=SessionMessageRoleEnum.AGENT,
             message_type=SessionMessageTypeEnum.RESULT,
             content=data.result,
-            iteration_number=agent_session.current_iteration,
         )
         await AgentSessionsCRUD.update(
             session, agent_session, {"status": SessionStatusEnum.DONE}
         )
 
         await AgentSessionMessageCRUD.create(session, agent_session_message_data)
-        interview_status = InterviewStatusEnum.DONE
 
-    await InterviewCRUD.update(session, interview, {"status": interview_status})
+    await InterviewCRUD.update(
+        session, interview, {"status": InterviewStatusEnum.FINISHED}
+    )

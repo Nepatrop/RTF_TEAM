@@ -7,16 +7,12 @@ class InterviewTypeEnum(enum.Enum):
 
 
 class InterviewStatusEnum(enum.Enum):
-    CREATED = "created"
     ACTIVE = "active"
-    QUESTION = "question"
-    DONE = "done"
-    ERROR = "error"
+    FINISHED = "finished"
 
 
 class SessionStatusEnum(enum.Enum):
     PROCESSING = "processing"
-    GENERATING_QUESTIONS = "generating_questions"
     WAITING_FOR_ANSWERS = "waiting_for_answers"
     DONE = "done"
     ERROR = "error"

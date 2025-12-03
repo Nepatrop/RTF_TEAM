@@ -31,7 +31,6 @@ def upgrade() -> None:
             "status",
             sa.Enum(
                 "PROCESSING",
-                "GENERATING_QUESTIONS",
                 "WAITING_FOR_ANSWERS",
                 "DONE",
                 "ERROR",
