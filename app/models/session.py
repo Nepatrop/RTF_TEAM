@@ -3,7 +3,7 @@ from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 
 from app.models.base import Base
-from app.models import SessionStatusEnum, SessionMessageRoleEnum, SessionMessageTypeEnum
+from app.models import SessionStatusEnum, SessionMessageRoleEnum, SessionMessageTypeEnum, QuestionStatusEnum, AgentSessionStatusEnum
 
 
 class AgentSessions(Base):
@@ -15,8 +15,10 @@ class AgentSessions(Base):
     )
     external_session_id = Column(String, unique=True, nullable=False)
     status = Column(Enum(SessionStatusEnum), nullable=False)
+    agent_session_status = Column(Enum(AgentSessionStatusEnum), nullable=True)
     current_iteration = Column(Integer, nullable=False, default=1)
     context_questions = Column(JSON, nullable=True)
+    callback_url = Column(String, nullable=False)
 
     interview = relationship("Interview", back_populates="session")
     messages = relationship(
@@ -35,6 +37,11 @@ class AgentSessionMessage(Base):
     role = Column(Enum(SessionMessageRoleEnum), nullable=False)
     content = Column(String, nullable=False)
     message_type = Column(Enum(SessionMessageTypeEnum), nullable=False)
+    question_id = Column(String, nullable=True)
+    question_number = Column(Integer, nullable=True)
+    question_status = Column(Enum(QuestionStatusEnum, values_callable=lambda obj: [e.value for e in obj]), nullable=True)
+    explanation = Column(Text, nullable=True)
+    
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     session = relationship("AgentSessions", back_populates="messages")
