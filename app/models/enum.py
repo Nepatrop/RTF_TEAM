@@ -7,6 +7,7 @@ class InterviewTypeEnum(enum.Enum):
 
 
 class InterviewStatusEnum(enum.Enum):
+    CREATED = "created" #TO DO убрать
     ACTIVE = "active"
     FINISHED = "finished"
 
@@ -34,3 +35,22 @@ class SessionCallbackEnum(enum.Enum):
     QUESTIONS = "questions"
     FINAL_RESULT = "finalResult"
     PROJECT_UPDATED = "projectUpdated"
+    ERROR = "error"
+
+class QuestionStatusEnum(enum.Enum):
+    UNANSWERED = "unanswered"
+    ANSWERED = "answered"
+    SKIPPED = "skipped"
+
+class AgentSessionStatusEnum(enum.Enum):
+    ASK_USER_GOAL = "ASK_USER_GOAL"
+    SELECT_OR_CREATE_PROJECT = "SELECT_OR_CREATE_PROJECT"
+    ASK_USER_CONTEXT = "ASK_USER_CONTEXT"
+    CHOOSE_MODE = "CHOOSE_MODE"
+    WAITING_FOR_ANSWERS = "WAITING_FOR_ANSWERS"
+    DRAFT_COLLECTING = "DRAFT_COLLECTING"
+    VALIDATING = "VALIDATING"
+    GENERATING_REQUIREMENTS = "GENERATING_REQUIREMENTS"
+    DONE = "DONE"
+    CANCELLED = "CANCELLED"
+    ERROR = "ERROR"

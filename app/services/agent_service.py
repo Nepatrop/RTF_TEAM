@@ -1,6 +1,7 @@
 from fastapi import status, HTTPException
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import httpx
+import uuid
 
 
 class AgentService:
@@ -59,21 +60,35 @@ class AgentService:
                 detail=f"Agent did not delete project: {data}",
             )
 
-    async def create_interview_session(self, project_id: str, questions: List) -> Dict:
-
-        context_questions = {
-            "task": questions[0],
-            "goal": questions[1],
-            "value": questions[2],
-        }
+    async def create_interview_session(self, interview_id: Optional[int] = None, project_id: Optional[int] = None,
+                                       context_questions: Optional[Dict] = None, callback_url: str = None) -> Dict:
+        if not callback_url:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="callback_url is required"
+            )
+        
         data = {
-            "project_id": project_id,
-            "context_questions": context_questions,
+            "callback_url": callback_url,
         }
+        
+        if interview_id:
+            data["interview_id"] = str(interview_id)
+        
+        if project_id:
+            data["project_id"] = str(project_id)
+        
+        if context_questions:
+            data["context_questions"] = context_questions
+        
+        x_request_id = str(uuid.uuid4())
+
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.post(
-                    f"{self.url}/api/v1/interview-session", json=data
+                    f"{self.url}/api/v1/interview-session",
+                    json=data,
+                    headers={"X-Request-ID": x_request_id},
                 )
                 if response.status_code != 200:
                     raise HTTPException(
@@ -87,10 +102,12 @@ class AgentService:
         return response.json()
 
     async def get_session_status(self, session_id: str) -> Dict:
+        x_request_id = str(uuid.uuid4())
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.get(
-                    f"{self.url}/api/v1/interview-session/{session_id}"
+                    f"{self.url}/api/v1/interview-session/{session_id}",
+                    headers={"X-Request-ID": x_request_id},
                 )
                 if response.status_code != 200:
                     raise HTTPException(
@@ -104,14 +121,16 @@ class AgentService:
         return response.json()
 
     async def submit_answers(
-        self, session_id: str, iteration_number: str, answers: str
+        self, session_id: str, iteration_number: int, answers: Any
     ) -> Dict:
         data = {"answers": answers}
+        x_request_id = str(uuid.uuid4())
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.post(
                     f"{self.url}/api/v1/interview-session/{session_id}/{iteration_number}/answers",
                     json=data,
+                    headers={"X-Request-ID": x_request_id},
                 )
                 if response.status_code != 200:
                     raise HTTPException(
@@ -129,6 +148,25 @@ class AgentService:
             async with httpx.AsyncClient() as client:
                 response = await client.post(
                     f"{self.url}/api/v1/interview-session/{session_id}/cancel"
+                )
+                if response.status_code != 200:
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail="Failed to cancel session",
+                    )
+        except httpx.HTTPError as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"{e}"
+            )
+        return response.json()
+
+    async def cancel_session(self, session_id: str) -> Dict:
+        x_request_id = str(uuid.uuid4())
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{self.url}/api/v1/interview-session/{session_id}/cancel",
+                    headers={"X-Request-ID": x_request_id},
                 )
                 if response.status_code != 200:
                     raise HTTPException(

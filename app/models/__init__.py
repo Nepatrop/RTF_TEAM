@@ -9,6 +9,8 @@ from .enum import (
     SessionMessageTypeEnum,
     SessionMessageRoleEnum,
     SessionCallbackEnum,
+    QuestionStatusEnum,
+    AgentSessionStatusEnum,
 )
 from .interview import Interview, InterviewFile
 from .requirement import Requirement
@@ -30,4 +32,6 @@ _all__ = (
     "AgentSessions",
     "AgentSessionMessage",
     "SessionCallbackEnum",
+    "QuestionStatusEnum",
+    "AgentSessionStatusEnum",
 )
