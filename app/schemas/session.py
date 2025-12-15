@@ -11,6 +11,7 @@ from app.models import (
     AgentSessionStatusEnum,
 )
 
+
 class QuestionData(BaseModel):
     id: str = Field(..., description="UUID вопроса от агента")
     question_number: int
@@ -22,6 +23,7 @@ class QuestionData(BaseModel):
 class IterationWithQuestions(BaseModel):
     session_id: str
     iteration_id: str
+    project_id: str
     iteration_number: int
     title: Optional[str] = None
     questions: List[QuestionData]
@@ -30,14 +32,14 @@ class IterationWithQuestions(BaseModel):
 class CallbackProjectUpdatedData(BaseModel):
     id: str
     title: str
-    description: Optional[str] = None
+    description: str
     size: int
     files: List[Dict[str, Any]]
 
 
 class SessionDTO(BaseModel):
     session_id: str
-    project_id: str
+    project_id: Optional[str] = None
     session_status: AgentSessionStatusEnum
     iteration_number: int
     final_result: Optional[str] = None
@@ -53,23 +55,33 @@ class CallbackErrorData(BaseModel):
 class AgentCallback(BaseModel):
     event: SessionCallbackEnum
     timestamp: datetime
-    data: Union[IterationWithQuestions, SessionDTO, CallbackProjectUpdatedData, CallbackErrorData]
+    data: Union[
+        IterationWithQuestions,
+        SessionDTO,
+        CallbackProjectUpdatedData,
+        CallbackErrorData,
+    ]
+
 
 # Модели для создания сессии
 
-class ContextQuestions(BaseModel):
-    task: str
-    goal: str
-    value: str
+
+class ContextQuestion(BaseModel):
+    question: str
+    answer: str
 
 
-class SessionStartRequest(BaseModel):
-    interview_id: Optional[int] = None
-    project_id: Optional[int] = None
-    context_questions: Optional[ContextQuestions] = None
-    callback_url: str = Field(..., description="URL для отправки callback'ов")
+class SessionStartProjectContextRequest(BaseModel):
+    user_goal: str
+
+
+class SessionStartManualContextRequest(BaseModel):
+    user_goal: str
+    context_questions: List[ContextQuestion]
+
 
 # Модели ответов
+
 
 class AnswerQuestion(BaseModel):
     question_id: str
@@ -82,19 +94,12 @@ class SkipQuestion(BaseModel):
 
 
 class SessionAnswerRequest(BaseModel):
-    message: Optional[str] = None
-    answers: Optional[Union[str, List[AnswerQuestion], Dict[str, Any]]] = None
-    
-    # Валидатор для обработки разных форматов
-    @field_validator('answers', mode='before')
-    @classmethod
-    def validate_answers(cls, v, info):
-        # Если передано message, но не передано answers
-        if info.data.get('message') and v is None:
-            return info.data.get('message')
-        return v
+    answer: str
+    is_skipped: bool = False
+
 
 # Модели сообщений
+
 
 class AgentSessionMessageShallow(BaseModel):
     role: SessionMessageRoleEnum
@@ -108,6 +113,18 @@ class AgentSessionMessageShallow(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class UserSessionAnswerShallow(BaseModel):
+    role: SessionMessageRoleEnum
+    message_type: SessionMessageTypeEnum
+    parent_message_id: int
+    content: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
 
 class AgentSessionMessageCreate(BaseModel):
     session_id: int
@@ -140,7 +157,6 @@ class SessionStatusResponse(BaseModel):
     id: int
     external_session_id: str
     status: SessionStatusEnum
-    agent_session_status: Optional[AgentSessionStatusEnum] = None
     current_iteration: int
     messages: Optional[List[AgentSessionMessageShallow]] = []
 
@@ -150,11 +166,9 @@ class SessionStatusResponse(BaseModel):
 
 class AgentSessionBase(BaseModel):
     id: int
-    external_session_id: str
+    external_session_id: Optional[str] = None
     status: SessionStatusEnum
-    agent_session_status: Optional[AgentSessionStatusEnum] = None
     current_iteration: int
-    callback_url: str
 
     class Config:
         from_attributes = True

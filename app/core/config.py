@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_MINUTES: int = os.getenv("", "REFRESH_TOKEN_EXPIRE_MINUTES")
     BACKEND_CORS_ORIGINS: str = os.getenv("", "BACKEND_CORS_ORIGINS")
     EXTERNAL_API_URL: str = os.getenv("", "EXTERNAL_API_URL")
+    CALLBACK_URL: str = os.getenv("", "СALLBACK_URL")
 
 
 class LocalSettings(Settings):

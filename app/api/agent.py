@@ -7,12 +7,12 @@ from fastapi import (
     Depends,
     Request,
     Header,
+    Path,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 from app import schemas
 from app.cruds import (
-    InterviewCRUD,
     AgentSessionsCRUD,
     AgentSessionMessageCRUD,
     ProjectCRUD,
@@ -23,21 +23,17 @@ from app.models import (
     SessionStatusEnum,
     SessionMessageTypeEnum,
     SessionMessageRoleEnum,
-    Interview,
-    InterviewTypeEnum,
-    InterviewStatusEnum,
-    QuestionStatusEnum,
-    AgentSessions,
-    AgentSessionMessage,
 )
 from app.dependencies import get_current_user, get_agent
 from app.services import (
     handle_questions_webhook,
     handle_final_result_webhook,
     handle_error_webhook,
+    handle_project_update_webhook,
     AgentService,
 )
 from app.core.database import get_db, session as get_session_maker
+from pydantic import PositiveInt
 
 router = APIRouter(prefix="/agent", tags=["agent"])
 ws_router = APIRouter(tags=["websocket"])
@@ -60,15 +56,17 @@ async def webhook_update_session(
     request: Request,
     payload: schemas.AgentCallback,
     session: AsyncSession = Depends(get_db),
-    x_request_id: Optional[str] = Header(None, alias="X-Request-ID"),
+    x_request_id: str = Header(..., alias="X-Request-ID"),
 ):
     if not x_request_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="X-Request-ID header is required"
+            detail="X-Request-ID header is required",
         )
 
     match payload.event:
+        case SessionCallbackEnum.PROJECT_UPDATED:
+            await handle_project_update_webhook(request, payload.data, session)
         case SessionCallbackEnum.QUESTIONS:
             await handle_questions_webhook(request, payload.data, session)
         case SessionCallbackEnum.FINAL_RESULT:
@@ -112,18 +110,23 @@ async def websocket_agent_session(websocket: WebSocket, session_id: int):
                             if msg.question_number:
                                 message_data["question_number"] = msg.question_number
                             if msg.question_status:
-                                message_data["question_status"] = msg.question_status.value
+                                message_data["question_status"] = (
+                                    msg.question_status.value
+                                )
                             if msg.explanation:
                                 message_data["explanation"] = msg.explanation
-                            
+                            if msg.parent_message_id:
+                                message_data["parent_message_id"] = (
+                                    msg.parent_message_id
+                                )
+
                             messages.append(message_data)
-                        
+
                         await websocket.send_json(
                             {
                                 "status": "ok",
                                 "session_id": session_id,
                                 "session_status": db_session_obj.status.value,
-                                "agent_session_status": db_session_obj.agent_session_status.value if db_session_obj.agent_session_status else None,
                                 "current_iteration": db_session_obj.current_iteration,
                                 "messages": messages if messages else [],
                             }
@@ -153,7 +156,7 @@ async def websocket_agent_session(websocket: WebSocket, session_id: int):
 
 
 @router.post(
-    "/sessions/start",
+    "/sessions/start/project/{project_id}",
     status_code=201,
     response_model=schemas.AgentSessionBase,
     responses={
@@ -163,91 +166,81 @@ async def websocket_agent_session(websocket: WebSocket, session_id: int):
         500: {"description": "Internal Server Error", "model": schemas.ErrorResponse},
     },
 )
-async def start_agent_session(
-    payload: schemas.SessionStartRequest,
+async def start_agent_session_on_project(
+    payload: schemas.SessionStartProjectContextRequest,
+    project_id: PositiveInt = Path(..., description="The identifier of project"),
     current_user: UserORM = Depends(get_current_user),
     agent: AgentService = Depends(get_agent),
     session: AsyncSession = Depends(get_db),
 ):
-    interview = None
-    if payload.interview_id:
-        interview = await InterviewCRUD.get_by_id(session, payload.interview_id)
-        if not interview:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Interview not found"
-            )
-        
-        if interview.project.user_id != current_user.id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You are not owner of this project",
-            )
-        
-        project = interview.project
+    project = await ProjectCRUD.get_by_id(session, project_id)
 
-    elif payload.project_id and payload.context_questions:
-        project = await ProjectCRUD.get_by_id(session, payload.project_id)
-        if project.user_id != current_user.id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You are not owner of this project",
-            )
-        
-        existing_count = await InterviewCRUD.count_by_project(session, project)
-        interview_data = schemas.InterviewCreate(
-            name=f"Interview №{existing_count + 1}",
-            type=InterviewTypeEnum.TEXT,
-            status=InterviewStatusEnum.ACTIVE,
-            project_id=payload.project_id,
-        )
-        interview = await InterviewCRUD.create(session, interview_data)
-    
-    else:
+    if not project.external_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Either interview_id or (project_id + context_questions) is required"
+            detail="You can not start session with this project",
         )
 
     try:
         await agent.health_check()
-        
-        agent_response = await agent.create_interview_session(
-            interview_id=interview.id if payload.interview_id else None,
-            project_id=project.id,
-            context_questions=payload.context_questions.model_dump() if payload.context_questions else None,
-            callback_url=payload.callback_url
+
+        await agent.create_session_on_project(project.external_id, payload.user_goal)
+    except HTTPException as e:
+        raise HTTPException(
+            status_code=e.status_code,
+            detail=f"Failed to create session on agent: {e.detail}",
+        )
+    session_data = {
+        "project_id": project.id,
+        "status": SessionStatusEnum.PROCESSING,
+    }
+
+    agent_session = await AgentSessionsCRUD.create(session, session_data)
+
+    return agent_session
+
+
+@router.post(
+    "/sessions/start/context",
+    status_code=201,
+    response_model=schemas.AgentSessionBase,
+    responses={
+        400: {"description": "Bad Request", "model": schemas.ErrorResponse},
+        401: {"description": "Unauthorized", "model": schemas.ErrorResponse},
+        404: {"description": "Not found", "model": schemas.ErrorResponse},
+        500: {"description": "Internal Server Error", "model": schemas.ErrorResponse},
+    },
+)
+async def start_agent_session_on_context(
+    payload: schemas.SessionStartManualContextRequest,
+    current_user: UserORM = Depends(get_current_user),
+    agent: AgentService = Depends(get_agent),
+    session: AsyncSession = Depends(get_db),
+):
+    try:
+        await agent.health_check()
+
+        await agent.create_interview_session_on_context(
+            payload.context_questions, payload.user_goal
         )
     except HTTPException as e:
         raise HTTPException(
             status_code=e.status_code,
             detail=f"Failed to create session on agent: {e.detail}",
         )
-    
-    external_session_id = agent_response.get("session_id")
-    if not external_session_id:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Agent did not return session_id",
-        )
-    
-    session_data = schemas.AgentSessionCreate(
-        interview_id=interview.id,
-        external_session_id=external_session_id,
-        status=SessionStatusEnum.PROCESSING,
-        current_iteration=1,
-        callback_url=payload.callback_url,
-        context_questions=payload.context_questions.model_dump() if payload.context_questions else None,
-    )
-    db_session = await AgentSessionsCRUD.create(session, session_data)
+    session_data = {
+        "status": SessionStatusEnum.PROCESSING,
+    }
 
-    return db_session
+    agent_session = await AgentSessionsCRUD.create(session, session_data)
+
+    return agent_session
 
 
 @router.post(
-    "/sessions/{session_id}/answers",
+    "/sessions/{session_id}/answer/{question_id}",
     status_code=200,
-    response_model=dict,
+    response_model=schemas.UserSessionAnswerShallow,
     responses={
         400: {"description": "Bad Request", "model": schemas.ErrorResponse},
         401: {"description": "Unauthorized", "model": schemas.ErrorResponse},
@@ -256,135 +249,56 @@ async def start_agent_session(
     },
 )
 async def submit_text_answers(
-    session_id: int,
     payload: schemas.SessionAnswerRequest,
+    session_id: PositiveInt = Path(..., description="The identifier of session"),
+    question_id: str = Path(..., description="The identifier of question"),
     current_user: UserORM = Depends(get_current_user),
     agent: AgentService = Depends(get_agent),
     session: AsyncSession = Depends(get_db),
 ):
-    try:
-        from sqlalchemy import select
-        from sqlalchemy.orm import selectinload
-        
-        stmt = (
-            select(AgentSessions)
-            .options(
-                selectinload(AgentSessions.interview)
-                .selectinload(Interview.project)
-            )
-            .where(AgentSessions.id == session_id)
-        )
-        
-        result = await session.execute(stmt)
-        db_session = result.scalar_one_or_none()
-        
-        if not db_session:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, 
-                detail="Session not found"
-            )
-
-        if db_session.interview.project.user_id != current_user.id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You are not owner of this project",
-            )
-
-        if db_session.status != SessionStatusEnum.WAITING_FOR_ANSWERS:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Session is not waiting for answers"
-            )
-
-        external_session_id = db_session.external_session_id
-        current_iteration = db_session.current_iteration
- 
-        answers_to_send = None
-        
-        if payload.message:
-            answers_to_send = payload.message
-
-            message = AgentSessionMessage(
-                session_id=db_session.id,
-                role=SessionMessageRoleEnum.USER,
-                content=payload.message,
-                message_type=SessionMessageTypeEnum.ANSWER,
-            )
-            session.add(message)
-            
-        elif payload.answers and isinstance(payload.answers, list):
-            answers_to_send = []
-            for answer in payload.answers:
-                message = AgentSessionMessage(
-                    session_id=db_session.id,
-                    role=SessionMessageRoleEnum.USER,
-                    content=answer.answer,
-                    message_type=SessionMessageTypeEnum.ANSWER,
-                    question_id=answer.question_id,
-                    question_status=QuestionStatusEnum.ANSWERED,
-                )
-                session.add(message)
-                answers_to_send.append({
-                    "question_id": answer.question_id,
-                    "answer": answer.answer
-                })
-            
-        elif payload.answers and isinstance(payload.answers, dict):
-            if "question_id" in payload.answers:
-                skip_data = payload.answers
-                message_content = skip_data.get("reason", "Question skipped")
-                
-                message = AgentSessionMessage(
-                    session_id=db_session.id,
-                    role=SessionMessageRoleEnum.USER,
-                    content=message_content,
-                    message_type=SessionMessageTypeEnum.ANSWER,
-                    question_id=skip_data["question_id"],
-                    question_status=QuestionStatusEnum.SKIPPED,
-                )
-                session.add(message)
-                answers_to_send = {"skip": skip_data}
-            else:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Invalid skip format. Missing question_id"
-                )
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid answer format. Provide 'message' or 'answers'"
-            )
-
-        db_session.status = SessionStatusEnum.PROCESSING
-        
-        await session.commit()
-        
-        if answers_to_send:
-            await agent.health_check()
-            await agent.submit_answers(
-                external_session_id,
-                current_iteration,
-                answers_to_send,
-            )
-        return {"status": "accepted"}
-        
-    except HTTPException:
-        await session.rollback()
-        raise
-    except Exception as e:
-        await session.rollback()
-        import traceback
-        traceback.print_exc()
+    question = await AgentSessionMessageCRUD.get_by_question_id(session, question_id)
+    if not question:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Internal server error: {str(e)}"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Question not found"
         )
+    agent_session = await AgentSessionsCRUD.get_by_id(session, session_id)
+    if agent_session.project.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not owner of this project",
+        )
+
+    if agent_session.status != SessionStatusEnum.WAITING_FOR_ANSWERS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Session is not waiting for answers",
+        )
+
+    message_data = {
+        "session_id": agent_session.id,
+        "parent_message_id": question.id,
+        "role": SessionMessageRoleEnum.USER,
+        "content": payload.answer,
+        "message_type": SessionMessageTypeEnum.ANSWER,
+    }
+
+    message = await AgentSessionMessageCRUD.create(session, message_data)
+
+    try:
+        await agent.health_check()
+        await agent.submit_text_answer(session_id, question_id, payload.answer)
+    except HTTPException as e:
+        raise HTTPException(
+            status_code=e.status_code,
+            detail=f"Failed to submit answer in agent: {e.detail}",
+        )
+    return message
 
 
 @router.post(
     "/sessions/{session_id}/cancel",
     status_code=200,
-    response_model=dict,
+    response_model=schemas.AgentSessionMessageShallow,
     responses={
         401: {"description": "Unauthorized", "model": schemas.ErrorResponse},
         404: {"description": "Not found", "model": schemas.ErrorResponse},
@@ -392,56 +306,36 @@ async def submit_text_answers(
     },
 )
 async def cancel_session(
-    session_id: int,
+    session_id: PositiveInt = Path(..., description="The identifier of session"),
     current_user: UserORM = Depends(get_current_user),
     agent: AgentService = Depends(get_agent),
     session: AsyncSession = Depends(get_db),
 ):
-    try:
-        from sqlalchemy import select
-        from sqlalchemy.orm import selectinload
-        
-        stmt = (
-            select(AgentSessions)
-            .options(
-                selectinload(AgentSessions.interview)
-                .selectinload(Interview.project)
-            )
-            .where(AgentSessions.id == session_id)
-        )
-        
-        result = await session.execute(stmt)
-        db_session = result.scalar_one_or_none()
-        
-        if not db_session:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, 
-                detail="Session not found"
-            )
-        
-        if db_session.interview.project.user_id != current_user.id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You are not owner of this project",
-            )
-        
-        await agent.health_check()
-        await agent.cancel_session(db_session.external_session_id)
+    agent_session = await AgentSessionsCRUD.get_by_id(session, session_id)
 
-        db_session.status = SessionStatusEnum.CANCELLED
-        
-        await session.commit()
-        return {"status": "cancelled"}
-        
-    except HTTPException:
-        await session.rollback()
-        raise
-    except Exception as e:
-        await session.rollback()
+    if agent_session.project.user_id != current_user.id:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Internal server error: {str(e)}"
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not owner of this project",
         )
+
+    try:
+        await agent.health_check()
+        await agent.cancel_session(session_id)
+    except HTTPException as e:
+        raise HTTPException(
+            status_code=e.status_code,
+            detail=f"Failed to submit answer in agent: {e.detail}",
+        )
+
+    agent_session_data = {
+        "status": SessionStatusEnum.CANCELLED,
+    }
+    agent_session = await AgentSessionsCRUD.update(
+        session, agent_session, agent_session_data
+    )
+
+    return agent_session
 
 
 @router.get(
@@ -455,24 +349,20 @@ async def cancel_session(
     },
 )
 async def get_session_status(
-    session_id: int,
+    session_id: PositiveInt = Path(..., description="The identifier of session"),
     current_user: UserORM = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ):
-    db_session = await AgentSessionsCRUD.get_by_id(session, session_id)
-    if not db_session:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Session not found"
-        )
+    agent_session = await AgentSessionsCRUD.get_by_id(session, session_id)
 
-    if db_session.interview.project.user_id != current_user.id:
+    if agent_session.project.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You are not owner of this project",
         )
 
     messages = []
-    for msg in db_session.messages:
+    for msg in agent_session.messages:
         message_data = schemas.AgentSessionMessageShallow(
             role=msg.role,
             message_type=msg.message_type,
@@ -487,9 +377,8 @@ async def get_session_status(
 
     return schemas.SessionStatusResponse(
         id=session_id,
-        external_session_id=db_session.external_session_id,
-        status=db_session.status,
-        agent_session_status=db_session.agent_session_status,
-        current_iteration=db_session.current_iteration,
+        external_session_id=agent_session.external_session_id,
+        status=agent_session.status,
+        current_iteration=agent_session.current_iteration,
         messages=messages if messages else None,
     )

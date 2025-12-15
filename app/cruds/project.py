@@ -1,6 +1,6 @@
 from sqlalchemy import select, or_, func, desc, case
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 
 from app.cruds import BaseCRUD
 from app.models import Project as ProjectORM
@@ -24,7 +24,7 @@ class ProjectCRUD(BaseCRUD):
         if search:
             base_query = base_query.where(
                 or_(
-                    cls.model.name.ilike(f"%{search}%"),
+                    cls.model.title.ilike(f"%{search}%"),
                     cls.model.description.ilike(f"%{search}%"),
                 )
             )
@@ -32,12 +32,10 @@ class ProjectCRUD(BaseCRUD):
         count_query = select(func.count()).select_from(base_query.subquery())
         total_count = await session.scalar(count_query)
 
-        priority = case((cls.model.name.ilike(f"%{search}%"), 1), else_=0)
+        priority = case((cls.model.title.ilike(f"%{search}%"), 1), else_=0)
 
         paginated_query = (
-            base_query.order_by(
-                desc(priority), cls.model.id.desc()
-            )  # Сначала по приоритету, потом по ID (стабильность)
+            base_query.order_by(desc(priority), cls.model.id.desc())
             .offset(offset)
             .limit(limit)
         )
@@ -46,3 +44,19 @@ class ProjectCRUD(BaseCRUD):
         items = result.scalars().all()
 
         return items, total_count
+
+    @classmethod
+    async def get_by_external_id(
+        cls, session: AsyncSession, external_id: str
+    ) -> Optional[ProjectORM]:
+        query = select(cls.model).where(cls.model.external_id == external_id)
+        result = await session.execute(query)
+        return result.scalar_one_or_none()
+
+    @classmethod
+    async def get_by_title(
+        cls, session: AsyncSession, title: str
+    ) -> Optional[ProjectORM]:
+        query = select(cls.model).where(cls.model.title == title)
+        result = await session.execute(query)
+        return result.scalar_one_or_none()

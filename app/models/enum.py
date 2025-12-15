@@ -1,13 +1,7 @@
 import enum
 
 
-class InterviewTypeEnum(enum.Enum):
-    TEXT = "text"
-    AUDIO = "audio"
-
-
-class InterviewStatusEnum(enum.Enum):
-    CREATED = "created" #TO DO убрать
+class ProjectStatusEnum(enum.Enum):
     ACTIVE = "active"
     FINISHED = "finished"
 
@@ -37,10 +31,12 @@ class SessionCallbackEnum(enum.Enum):
     PROJECT_UPDATED = "projectUpdated"
     ERROR = "error"
 
+
 class QuestionStatusEnum(enum.Enum):
     UNANSWERED = "unanswered"
     ANSWERED = "answered"
     SKIPPED = "skipped"
+
 
 class AgentSessionStatusEnum(enum.Enum):
     ASK_USER_GOAL = "ASK_USER_GOAL"
@@ -54,3 +50,9 @@ class AgentSessionStatusEnum(enum.Enum):
     DONE = "DONE"
     CANCELLED = "CANCELLED"
     ERROR = "ERROR"
+
+
+class RequirementContentType(enum.Enum):
+    MARKDOWN = "markdown"
+    DOCX = "docx"
+    PDF = "pdf"

@@ -1,22 +1,7 @@
 from .user import UserBase, UserCreate, UserUpdate
 from .auth import Token, RefreshTokenCreate, RefreshToken, Login, Register
 from .error import RequestValidationError, ErrorResponse
-from .project import (
-    ProjectCreate,
-    ProjectBase,
-    ProjectUpdate,
-    ProjectCreateInternal,
-    ProjectsGet,
-)
-
-from .interview import (
-    InterviewBase,
-    InterviewUpdate,
-    InterviewsGet,
-    InterviewShallow,
-    InterviewCreate,
-    InterviewFileCreate,
-)
+from .project import ProjectBase, ProjectsGet, ProjectFileBase, ProjectFileCreate
 
 from .session import (
     QuestionData,
@@ -25,8 +10,9 @@ from .session import (
     SessionDTO,
     CallbackErrorData,
     AgentCallback,
-    ContextQuestions,
-    SessionStartRequest,
+    ContextQuestion,
+    SessionStartProjectContextRequest,
+    SessionStartManualContextRequest,
     AnswerQuestion,
     SkipQuestion,
     SessionAnswerRequest,
@@ -36,6 +22,7 @@ from .session import (
     AgentSessionUpdate,
     SessionStatusResponse,
     AgentSessionBase,
+    UserSessionAnswerShallow,
 )
 
 _all_ = (
@@ -64,7 +51,7 @@ _all_ = (
     "SessionDTO",
     "CallbackErrorData",
     "AgentCallback",
-    "ContextQuestions",
+    "ContextQuestion",
     "SessionStartRequest",
     "AnswerQuestion",
     "SkipQuestion",
@@ -75,4 +62,7 @@ _all_ = (
     "AgentSessionUpdate",
     "SessionStatusResponse",
     "AgentSessionBase",
+    "ProjectFileBase",
+    "ProjectFileCreate",
+    "UserSessionAnswerShallow",
 )
