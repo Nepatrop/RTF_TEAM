@@ -18,12 +18,13 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 async def _create_tokens(session: AsyncSession, user: UserORM):
     refresh, expires_at = create_refresh_token(user.id)
-    await RefreshTokenCRUD.create(
-        session,
-        schemas.RefreshTokenCreate(
-            token=refresh, user_id=user.id, expires_at=expires_at
-        ),
-    )
+
+    refresh_token_data = {
+        "token": refresh,
+        "user_id": user.id,
+        "expires_at": expires_at,
+    }
+    await RefreshTokenCRUD.create(session, refresh_token_data)
     access = create_access_token(user.id)
     return schemas.Token(access_token=access, refresh_token=refresh)
 
@@ -50,11 +51,12 @@ async def register(payload: schemas.Register, session: AsyncSession = Depends(ge
         raise HTTPException(status.HTTP_409_CONFLICT, detail="User Already Exists")
 
     hash_password = get_password_hash(payload.password)
-    user_data = schemas.UserCreate(
-        email=payload.email,
-        hashed_password=hash_password,
-        display_name=payload.display_name,
-    )
+
+    user_data = {
+        "email": payload.email,
+        "hashed_password": hash_password,
+        "display_name": payload.display_name,
+    }
     new_user = await UserCRUD.create(session, user_data)
 
     return await _create_tokens(session, new_user)
@@ -76,7 +78,10 @@ async def register(payload: schemas.Register, session: AsyncSession = Depends(ge
 async def login(payload: schemas.Login, session: AsyncSession = Depends(get_db)):
     user = await UserCRUD.get_by_email(session, payload.email)
     if not user or not verify_password(payload.password, user.hashed_password):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Incorrect email or password")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Incorrect email or password",
+        )
 
     return await _create_tokens(session, user)
 
@@ -115,7 +120,9 @@ async def refresh_token(
 ):
     token = await RefreshTokenCRUD.get_by_token(session, payload.refresh_token)
     if not token:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid refresh token")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid refresh token"
+        )
 
     user = await UserCRUD.get_by_id(session, token.user_id)
 

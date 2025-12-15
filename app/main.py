@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import logging
 
 from app.core.config import settings
-from app.api import auth, user, projects, interviews, agent
+from app.api import auth, user, projects, agent
 from app.exceptions import init_exception_handlers
 
 app = FastAPI(title=settings.PROJECT_NAME)
@@ -22,7 +22,6 @@ init_exception_handlers(app)
 app.include_router(auth.router)
 app.include_router(user.router)
 app.include_router(projects.router)
-app.include_router(interviews.router)
 app.include_router(agent.router)
 app.include_router(agent.ws_router)
 

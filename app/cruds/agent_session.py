@@ -25,3 +25,11 @@ class AgentSessionsCRUD(BaseCRUD):
 
 class AgentSessionMessageCRUD(BaseCRUD):
     model = AgentSessionsMessageORM
+
+    @classmethod
+    async def get_by_question_id(
+        cls, session: AsyncSession, question_id: str
+    ) -> Optional[AgentSessionsMessageORM]:
+        query = select(cls.model).where(cls.model.question_id == question_id)
+        result = await session.execute(query)
+        return result.scalar_one_or_none()
