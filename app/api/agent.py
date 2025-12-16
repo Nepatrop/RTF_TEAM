@@ -105,7 +105,7 @@ async def websocket_agent_session(websocket: WebSocket, session_id: int):
                                 for m in db_session_obj.messages
                                 if m.message_type == SessionMessageTypeEnum.QUESTION
                             ],
-                            key=lambda x: x.question_number,
+                            key=lambda x: (x.iteration, x.question_number),
                         )
                         answers = [
                             m
@@ -139,7 +139,6 @@ async def websocket_agent_session(websocket: WebSocket, session_id: int):
                                             "id": q.id,
                                             "content": q.content,
                                             "question_number": q.question_number,
-                                            "status": q.question_status.value,
                                             "explanation": q.explanation,
                                             "created_at": q.created_at.isoformat(),
                                         },
@@ -153,7 +152,6 @@ async def websocket_agent_session(websocket: WebSocket, session_id: int):
                                             "id": q.id,
                                             "content": q.content,
                                             "question_number": q.question_number,
-                                            "status": q.question_status.value,
                                             "explanation": q.explanation,
                                             "created_at": q.created_at.isoformat(),
                                         },
