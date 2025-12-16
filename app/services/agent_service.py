@@ -130,14 +130,18 @@ class AgentService:
 
     async def create_interview_session_on_context(
         self,
-        context_questions: List[schemas.ContextQuestion],
+        context_questions: schemas.ContextQuestion,
         user_goal: str,
     ) -> Dict:
         x_request_id = str(uuid.uuid4())
         data = {
-            "context_questions": context_questions,
             "user_goal": user_goal,
             "callback_url": self.callback_url,
+            "context_questions": [
+                {"task": context_questions.task},
+                {"goal": context_questions.goal},
+                {"value": context_questions.value},
+            ]
         }
 
         try:
@@ -147,7 +151,7 @@ class AgentService:
                     json=data,
                     headers={"X-Request-ID": x_request_id},
                 )
-                if response.status_code != 200:
+                if response.status_code != 202:
                     raise HTTPException(
                         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                         detail=f"Agent failed to create session: {response.text}",

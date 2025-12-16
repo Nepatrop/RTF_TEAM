@@ -31,6 +31,19 @@ class AgentSessionsCRUD(BaseCRUD):
         result = await session.execute(query)
         return result.scalar_one_or_none()
 
+    @classmethod
+    async def get_last(cls, session: AsyncSession) -> Optional[AgentSessionsORM]:
+        query = (
+            select(cls.model)
+            .where(cls.model.project_id.is_(None))
+            .order_by(cls.model.id.desc())
+            .limit(1)
+        )
+        result = await session.execute(query)
+        obj = result.scalar_one_or_none()
+        return obj
+
+
 
 class AgentSessionMessageCRUD(BaseCRUD):
     model = AgentSessionsMessageORM

@@ -64,10 +64,10 @@ class AgentCallback(BaseModel):
 
 # Модели для создания сессии
 
-
 class ContextQuestion(BaseModel):
-    question: str
-    answer: str
+    task: str
+    goal: str
+    value: str
 
 
 class SessionStartProjectContextRequest(BaseModel):
@@ -76,7 +76,7 @@ class SessionStartProjectContextRequest(BaseModel):
 
 class SessionStartManualContextRequest(BaseModel):
     user_goal: str
-    context_questions: List[ContextQuestion]
+    context_questions: ContextQuestion
 
 
 # Модели ответов

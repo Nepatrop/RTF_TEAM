@@ -61,13 +61,12 @@ async def webhook_update_session(
     session: AsyncSession = Depends(get_db),
     x_request_id: str = Header(..., alias="X-Request-ID"),
 ):
-    print(payload.data)
     if not x_request_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="X-Request-ID header is required",
         )
-
+    print(payload.data)
     match payload.event:
         case SessionCallbackEnum.PROJECT_UPDATED:
             await handle_project_update_webhook(request, payload.data, session)
@@ -281,6 +280,60 @@ async def start_agent_session_on_context(
     agent: AgentService = Depends(get_agent),
     session: AsyncSession = Depends(get_db),
 ):
+    agent_session_data = {
+        "user_goal": payload.user_goal,
+        "status": SessionStatusEnum.PROCESSING,
+    }
+
+    agent_session = await AgentSessionsCRUD.create(session, agent_session_data)
+    message_1_data = {
+        "session_id": agent_session.id,
+        "role": SessionMessageRoleEnum.AGENT,
+        "content": "Что хотите сделать?",
+        "message_type": SessionMessageTypeEnum.QUESTION,
+    }
+    message_1 = await AgentSessionMessageCRUD.create(session, message_1_data)
+    answer_1_data = {
+        "session_id": agent_session.id,
+        "role": SessionMessageRoleEnum.USER,
+        "content": payload.context_questions.task,
+        "message_type": SessionMessageTypeEnum.ANSWER,
+        "parent_message_id": message_1.id
+    }
+    await AgentSessionMessageCRUD.create(session, answer_1_data)
+
+    message_2_data = {
+        "session_id": agent_session.id,
+        "role": SessionMessageRoleEnum.AGENT,
+        "content": "Какая цель у этой задачи?",
+        "message_type": SessionMessageTypeEnum.QUESTION,
+    }
+    message_2 = await AgentSessionMessageCRUD.create(session, message_2_data)
+    answer_2_data = {
+        "session_id": agent_session.id,
+        "role": SessionMessageRoleEnum.USER,
+        "content": payload.context_questions.goal,
+        "message_type": SessionMessageTypeEnum.ANSWER,
+        "parent_message_id": message_2.id
+    }
+    await AgentSessionMessageCRUD.create(session, answer_2_data)
+
+    message_3_data = {
+        "session_id": agent_session.id,
+        "role": SessionMessageRoleEnum.AGENT,
+        "content": "Какую ценность несёт данное нововведение?",
+        "message_type": SessionMessageTypeEnum.QUESTION,
+    }
+    message_3 = await AgentSessionMessageCRUD.create(session, message_3_data)
+    answer_3_data = {
+        "session_id": agent_session.id,
+        "role": SessionMessageRoleEnum.USER,
+        "content": payload.context_questions.value,
+        "message_type": SessionMessageTypeEnum.ANSWER,
+        "parent_message_id": message_3.id
+    }
+    await AgentSessionMessageCRUD.create(session, answer_3_data)
+
     try:
         await agent.health_check()
 
@@ -292,11 +345,7 @@ async def start_agent_session_on_context(
             status_code=e.status_code,
             detail=f"Failed to create session on agent: {e.detail}",
         )
-    session_data = {
-        "status": SessionStatusEnum.PROCESSING,
-    }
 
-    agent_session = await AgentSessionsCRUD.create(session, session_data)
 
     return agent_session
 

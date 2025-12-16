@@ -51,18 +51,31 @@ async def handle_questions_webhook(
         )
 
     project = await ProjectCRUD.get_last(session)
-    project_id = project.id
-    agent_session = await AgentSessionsCRUD.get_by_project_id(session, project_id)
-    agent_session_id = agent_session.id
+    if project.status != ProjectStatusEnum.FINISHED:
+        project_id = project.id
+        agent_session = await AgentSessionsCRUD.get_by_project_id(session, project_id)
+        agent_session_id = agent_session.id
 
-    await AgentSessionsCRUD.update(
-        session,
-        agent_session,
-        {
-            "external_session_id": data.session_id,
-            "current_iteration": data.iteration_number,
-        },
-    )
+        update_data = {"current_iteration": data.iteration_number}
+        if agent_session.external_session_id is None:
+            update_data["external_session_id"] = data.session_id
+
+        await AgentSessionsCRUD.update(
+            session,
+            agent_session,
+            update_data,
+        )
+    else:
+        agent_session = await AgentSessionsCRUD.get_last(session)
+        agent_session_id = agent_session.id
+        if agent_session.external_session_id is None:
+            await AgentSessionsCRUD.update(
+                session,
+                agent_session,
+                {
+                    "external_session_id": data.session_id,
+                }
+            )
 
     for question in data.questions:
         existing = await AgentSessionMessageCRUD.get_by_external_question_id(
