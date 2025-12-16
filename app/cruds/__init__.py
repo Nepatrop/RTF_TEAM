@@ -3,7 +3,7 @@ from .user import UserCRUD
 from .refresh_token import RefreshTokenCRUD
 from .project import ProjectCRUD
 from .project_file import ProjectFileCRUD
-from .agent_session import AgentSessionsCRUD, AgentSessionMessageCRUD
+from .agent_session import AgentSessionsCRUD, AgentSessionMessageCRUD, AgentSessionRequirementCRUD
 
 __all__ = (
     "UserCRUD",
@@ -13,4 +13,5 @@ __all__ = (
     "ProjectFileCRUD",
     "AgentSessionsCRUD",
     "AgentSessionMessageCRUD",
+    "AgentSessionRequirementCRUD"
 )

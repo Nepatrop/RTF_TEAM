@@ -17,7 +17,6 @@ from app.models import (
     SessionMessageRoleEnum,
     SessionMessageTypeEnum,
     QuestionStatusEnum,
-    AgentSessionStatusEnum,
 )
 
 
@@ -37,6 +36,12 @@ class AgentSessions(Base):
         back_populates="session",
         cascade="all, delete-orphan",
         lazy="selectin",
+    )
+    requirement = relationship(
+        "AgentSessionRequirement",
+        back_populates="session",
+        cascade="all, delete-orphan",
+        uselist=False,
     )
 
 
@@ -66,4 +71,19 @@ class AgentSessionMessage(Base):
         "AgentSessions",
         back_populates="messages",
         lazy="selectin",
+    )
+
+class AgentSessionRequirement(Base):
+    __tablename__ = "agent_session_requirements"
+
+    id = Column(Integer, primary_key=True)
+    session_id = Column(Integer, ForeignKey("agent_sessions.id", ondelete="CASCADE"), unique=True)
+
+    content = Column(Text, nullable=False)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    session = relationship(
+        "AgentSessions",
+        back_populates="requirement"
     )

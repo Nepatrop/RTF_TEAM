@@ -12,7 +12,7 @@ from .enum import (
     AgentSessionStatusEnum,
     RequirementContentType,
 )
-from .session import AgentSessionMessage, AgentSessions
+from .session import AgentSessionMessage, AgentSessions, AgentSessionRequirement
 
 _all__ = (
     "Base",
@@ -32,4 +32,5 @@ _all__ = (
     "Project",
     "ProjectFile",
     "RequirementContentType",
+    "AgentSessionRequirement"
 )

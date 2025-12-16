@@ -2,7 +2,7 @@ from fastapi import Request, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Union
 
-from app.cruds import AgentSessionsCRUD, AgentSessionMessageCRUD, ProjectCRUD
+from app.cruds import AgentSessionsCRUD, AgentSessionMessageCRUD, ProjectCRUD, AgentSessionRequirementCRUD
 from app.models import (
     SessionStatusEnum,
     SessionMessageRoleEnum,
@@ -11,6 +11,7 @@ from app.models import (
     AgentSessions,
     AgentSessionMessage,
     AgentSessionStatusEnum,
+    ProjectStatusEnum,
 )
 from app import schemas
 
@@ -50,18 +51,31 @@ async def handle_questions_webhook(
         )
 
     project = await ProjectCRUD.get_last(session)
-    project_id = project.id
-    agent_session = await AgentSessionsCRUD.get_by_project_id(session, project_id)
-    agent_session_id = agent_session.id
+    if project.status != ProjectStatusEnum.FINISHED:
+        project_id = project.id
+        agent_session = await AgentSessionsCRUD.get_by_project_id(session, project_id)
+        agent_session_id = agent_session.id
 
-    await AgentSessionsCRUD.update(
-        session,
-        agent_session,
-        {
-            "external_session_id": data.session_id,
-            "current_iteration": data.iteration_number,
-        },
-    )
+        update_data = {"current_iteration": data.iteration_number}
+        if agent_session.external_session_id is None:
+            update_data["external_session_id"] = data.session_id
+
+        await AgentSessionsCRUD.update(
+            session,
+            agent_session,
+            update_data,
+        )
+    else:
+        agent_session = await AgentSessionsCRUD.get_last(session)
+        agent_session_id = agent_session.id
+        if agent_session.external_session_id is None:
+            await AgentSessionsCRUD.update(
+                session,
+                agent_session,
+                {
+                    "external_session_id": data.session_id,
+                }
+            )
 
     for question in data.questions:
         existing = await AgentSessionMessageCRUD.get_by_external_question_id(
@@ -112,58 +126,37 @@ async def handle_final_result_webhook(
             detail="X-Request-ID header is required",
         )
 
-    try:
-        from sqlalchemy import select
-        from sqlalchemy.orm import selectinload
+    agent_session = await AgentSessionsCRUD.get_by_external_id(session, data.session_id)
+    agent_session_upd = {
+        "status": data.session_status.value,
+        "current_iteration": data.iteration_number,
+    }
+    await AgentSessionsCRUD.update(session, agent_session, agent_session_upd)
 
-        stmt = (
-            select(AgentSessions)
-            .options(selectinload(AgentSessions.interview))
-            .where(AgentSessions.external_session_id == data.session_id)
-        )
-        result = await session.execute(stmt)
-        agent_session = result.scalar_one_or_none()
-
-        if not agent_session:
-            return
-
-        if data.session_status == AgentSessionStatusEnum.DONE:
-            session_status = SessionStatusEnum.DONE
-        elif data.session_status == AgentSessionStatusEnum.ERROR:
-            session_status = SessionStatusEnum.ERROR
-        else:
-            session_status = SessionStatusEnum.PROCESSING
-
-        agent_session.status = session_status
-        agent_session.agent_session_status = data.session_status
-        agent_session.current_iteration = data.iteration_number
-
-        if data.final_result:
-            message = AgentSessionMessage(
-                session_id=agent_session.id,
-                role=SessionMessageRoleEnum.AGENT,
-                content=data.final_result,
-                message_type=SessionMessageTypeEnum.RESULT,
+    if data.final_result:
+        message_upd = {
+            "session_id": agent_session.id,
+            "role": SessionMessageRoleEnum.AGENT,
+            "content": data.final_result,
+            "message_type": SessionMessageTypeEnum.RESULT,
+        }
+        await AgentSessionMessageCRUD.create(session, message_upd)
+        existing_req = await AgentSessionRequirementCRUD.get_by_session_id(session, agent_session.id)
+        if existing_req:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Requirements already exists",
             )
-            session.add(message)
+        requirements = {
+            "session_id": agent_session.id,
+            "content": data.final_result,
+        }
+        await AgentSessionRequirementCRUD.create(session, requirements)
 
-        interview_status = (
-            InterviewStatusEnum.FINISHED.name
-            if data.session_status == AgentSessionStatusEnum.DONE
-            else InterviewStatusEnum.ACTIVE
-        )
-
-        if agent_session.interview:
-            agent_session.interview.status = interview_status
-
-        await session.commit()
-
-    except Exception as e:
-        await session.rollback()
-        import traceback
-
-        traceback.print_exc()
-
+    project = await ProjectCRUD.get_by_external_id(session, data.project_id)
+    if project:
+        project_upd = {"status": ProjectStatusEnum.FINISHED}
+        await ProjectCRUD.update(session, project, project_upd)
     return {"status": "ok"}
 
 

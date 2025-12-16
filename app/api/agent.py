@@ -8,14 +8,16 @@ from fastapi import (
     Request,
     Header,
     Path,
+    Query
 )
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 from app import schemas
 from app.cruds import (
     AgentSessionsCRUD,
     AgentSessionMessageCRUD,
-    ProjectCRUD,
+    ProjectCRUD, AgentSessionRequirementCRUD,
 )
 from app.models import (
     User as UserORM,
@@ -31,7 +33,7 @@ from app.services import (
     handle_final_result_webhook,
     handle_error_webhook,
     handle_project_update_webhook,
-    AgentService,
+    AgentService, markdown_to_pdf, markdown_to_word,
 )
 from app.core.database import get_db, session as get_session_maker
 from pydantic import PositiveInt
@@ -59,13 +61,12 @@ async def webhook_update_session(
     session: AsyncSession = Depends(get_db),
     x_request_id: str = Header(..., alias="X-Request-ID"),
 ):
-    print(payload.data)
     if not x_request_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="X-Request-ID header is required",
         )
-
+    print(payload.data)
     match payload.event:
         case SessionCallbackEnum.PROJECT_UPDATED:
             await handle_project_update_webhook(request, payload.data, session)
@@ -92,6 +93,9 @@ async def websocket_agent_session(websocket: WebSocket, session_id: int):
                         db_session_obj = await AgentSessionsCRUD.get_by_id(
                             db_session, session_id
                         )
+                        requirement = await AgentSessionRequirementCRUD.get_by_session_id(
+                            db_session, session_id
+                        )
 
                         if not db_session_obj:
                             await websocket.send_json(
@@ -105,13 +109,22 @@ async def websocket_agent_session(websocket: WebSocket, session_id: int):
                                 for m in db_session_obj.messages
                                 if m.message_type == SessionMessageTypeEnum.QUESTION
                             ],
-                            key=lambda x: (x.iteration, x.question_number),
+                            key=lambda x: (x.created_at, x.id),
                         )
                         answers = [
                             m
                             for m in db_session_obj.messages
                             if m.message_type == SessionMessageTypeEnum.ANSWER
                         ]
+
+                        result_message = next(
+                            (
+                                m
+                                for m in db_session_obj.messages
+                                if m.message_type == SessionMessageTypeEnum.RESULT
+                            ),
+                            None,
+                        )
 
                         dialogue = []
                         stop = False
@@ -166,6 +179,15 @@ async def websocket_agent_session(websocket: WebSocket, session_id: int):
                             "session_status": db_session_obj.status.value,
                             "current_iteration": db_session_obj.current_iteration,
                             "dialogue": dialogue,
+                            "result": (
+                                {
+                                    "requirement_id": requirement.id,
+                                    "content": result_message.content,
+                                    "created_at": result_message.created_at.isoformat(),
+                                }
+                                if result_message
+                                else None
+                            ),
                         }
 
                         await websocket.send_json(payload)
@@ -258,6 +280,60 @@ async def start_agent_session_on_context(
     agent: AgentService = Depends(get_agent),
     session: AsyncSession = Depends(get_db),
 ):
+    agent_session_data = {
+        "user_goal": payload.user_goal,
+        "status": SessionStatusEnum.PROCESSING,
+    }
+
+    agent_session = await AgentSessionsCRUD.create(session, agent_session_data)
+    message_1_data = {
+        "session_id": agent_session.id,
+        "role": SessionMessageRoleEnum.AGENT,
+        "content": "Что хотите сделать?",
+        "message_type": SessionMessageTypeEnum.QUESTION,
+    }
+    message_1 = await AgentSessionMessageCRUD.create(session, message_1_data)
+    answer_1_data = {
+        "session_id": agent_session.id,
+        "role": SessionMessageRoleEnum.USER,
+        "content": payload.context_questions.task,
+        "message_type": SessionMessageTypeEnum.ANSWER,
+        "parent_message_id": message_1.id
+    }
+    await AgentSessionMessageCRUD.create(session, answer_1_data)
+
+    message_2_data = {
+        "session_id": agent_session.id,
+        "role": SessionMessageRoleEnum.AGENT,
+        "content": "Какая цель у этой задачи?",
+        "message_type": SessionMessageTypeEnum.QUESTION,
+    }
+    message_2 = await AgentSessionMessageCRUD.create(session, message_2_data)
+    answer_2_data = {
+        "session_id": agent_session.id,
+        "role": SessionMessageRoleEnum.USER,
+        "content": payload.context_questions.goal,
+        "message_type": SessionMessageTypeEnum.ANSWER,
+        "parent_message_id": message_2.id
+    }
+    await AgentSessionMessageCRUD.create(session, answer_2_data)
+
+    message_3_data = {
+        "session_id": agent_session.id,
+        "role": SessionMessageRoleEnum.AGENT,
+        "content": "Какую ценность несёт данное нововведение?",
+        "message_type": SessionMessageTypeEnum.QUESTION,
+    }
+    message_3 = await AgentSessionMessageCRUD.create(session, message_3_data)
+    answer_3_data = {
+        "session_id": agent_session.id,
+        "role": SessionMessageRoleEnum.USER,
+        "content": payload.context_questions.value,
+        "message_type": SessionMessageTypeEnum.ANSWER,
+        "parent_message_id": message_3.id
+    }
+    await AgentSessionMessageCRUD.create(session, answer_3_data)
+
     try:
         await agent.health_check()
 
@@ -269,11 +345,7 @@ async def start_agent_session_on_context(
             status_code=e.status_code,
             detail=f"Failed to create session on agent: {e.detail}",
         )
-    session_data = {
-        "status": SessionStatusEnum.PROCESSING,
-    }
 
-    agent_session = await AgentSessionsCRUD.create(session, session_data)
 
     return agent_session
 
@@ -284,10 +356,11 @@ async def start_agent_session_on_context(
     response_model=schemas.UserSessionAnswerShallow,
     responses={
         400: {
-            "description": "Question not found | Answer for this question already exists | You are not owner of this project | Session is not waiting for answers",
+            "description": "Answer for this question already exists | Session is not waiting for answers",
             "model": schemas.ErrorResponse,
         },
         401: {"description": "Unauthorized", "model": schemas.ErrorResponse},
+        403: {"description": "You are not owner of this project", "model": schemas.ErrorResponse},
         404: {"description": "Not found", "model": schemas.ErrorResponse},
         500: {"description": "Internal Server Error", "model": schemas.ErrorResponse},
     },
@@ -301,10 +374,6 @@ async def submit_text_answers(
     session: AsyncSession = Depends(get_db),
 ):
     question = await AgentSessionMessageCRUD.get_by_id(session, question_id)
-    if not question:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Question not found"
-        )
     exist_answer = await AgentSessionMessageCRUD.answer_exists(
         session=session,
         question_id=question.id,
