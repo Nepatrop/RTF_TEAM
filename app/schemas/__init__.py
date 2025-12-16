@@ -22,6 +22,7 @@ from .session import (
     AgentSessionBase,
     UserSessionAnswerShallow,
 )
+from .requirements import RequirementBase, RequirementUpdate
 
 _all_ = (
     "Register",
@@ -63,4 +64,6 @@ _all_ = (
     "ProjectFileBase",
     "ProjectFileCreate",
     "UserSessionAnswerShallow",
+    "RequirementBase",
+    "RequirementUpdate",
 )

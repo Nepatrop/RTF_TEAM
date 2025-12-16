@@ -8,14 +8,16 @@ from fastapi import (
     Request,
     Header,
     Path,
+    Query
 )
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 from app import schemas
 from app.cruds import (
     AgentSessionsCRUD,
     AgentSessionMessageCRUD,
-    ProjectCRUD,
+    ProjectCRUD, AgentSessionRequirementCRUD,
 )
 from app.models import (
     User as UserORM,
@@ -31,7 +33,7 @@ from app.services import (
     handle_final_result_webhook,
     handle_error_webhook,
     handle_project_update_webhook,
-    AgentService,
+    AgentService, markdown_to_pdf, markdown_to_word,
 )
 from app.core.database import get_db, session as get_session_maker
 from pydantic import PositiveInt
@@ -302,10 +304,11 @@ async def start_agent_session_on_context(
     response_model=schemas.UserSessionAnswerShallow,
     responses={
         400: {
-            "description": "Question not found | Answer for this question already exists | You are not owner of this project | Session is not waiting for answers",
+            "description": "Answer for this question already exists | Session is not waiting for answers",
             "model": schemas.ErrorResponse,
         },
         401: {"description": "Unauthorized", "model": schemas.ErrorResponse},
+        403: {"description": "You are not owner of this project", "model": schemas.ErrorResponse},
         404: {"description": "Not found", "model": schemas.ErrorResponse},
         500: {"description": "Internal Server Error", "model": schemas.ErrorResponse},
     },
@@ -319,10 +322,6 @@ async def submit_text_answers(
     session: AsyncSession = Depends(get_db),
 ):
     question = await AgentSessionMessageCRUD.get_by_id(session, question_id)
-    if not question:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Question not found"
-        )
     exist_answer = await AgentSessionMessageCRUD.answer_exists(
         session=session,
         question_id=question.id,
@@ -462,4 +461,98 @@ async def get_session_status(
         status=agent_session.status,
         current_iteration=agent_session.current_iteration,
         messages=messages if messages else None,
+    )
+
+@router.get(
+    "/sessions/{session_id}/requirements",
+    status_code=200,
+    tags=["requirements"],
+    response_model=schemas.RequirementBase,
+    responses={
+        401: {"description": "Unauthorized"},
+        403: {"description": "Forbidden"},
+        404: {"description": "Not found"},
+        500: {"description": "Internal Server Error"},
+    },
+)
+async def get_requirements(
+    session_id: int = Path(..., description="The identifier of session"),
+    current_user: UserORM = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+):
+    agent_session = await AgentSessionsCRUD.get_by_id(session, session_id)
+    if not agent_session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    if agent_session.project and agent_session.project.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="You are not owner of this project")
+
+    requirements = await AgentSessionRequirementCRUD.get_by_session_id(session, session_id)
+    if not requirements:
+        raise HTTPException(status_code=404, detail="Requirements not found")
+
+    return requirements
+
+@router.patch(
+    "/sessions/{session_id}/requirements",
+    status_code=200,
+    tags=["requirements"],
+    response_model=schemas.RequirementBase,
+    responses={
+        401: {"description": "Unauthorized", "model": schemas.ErrorResponse},
+        403: {"description": "Not found", "model": schemas.ErrorResponse},
+        404: {"description": "Not found", "model": schemas.ErrorResponse},
+        500: {"description": "Internal Server Error", "model": schemas.ErrorResponse},
+    },
+)
+async def update_requirements(
+    payload: schemas.RequirementUpdate,
+    session_id: PositiveInt = Path(..., description="The identifier of session"),
+    current_user: UserORM = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+):
+    agent_session = await AgentSessionsCRUD.get_by_id(session, session_id)
+
+    if agent_session.project and agent_session.project.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="You are not owner of this project")
+
+    existing_requirements = await AgentSessionRequirementCRUD.get_by_session_id(session, session_id)
+    if not existing_requirements:
+        raise HTTPException(status_code=404, detail="Requirements not found")
+
+    update_data = payload.model_dump(exclude_unset=True)
+    requirements = await AgentSessionRequirementCRUD.update(session, existing_requirements, update_data)
+    return requirements
+
+@router.get("/sessions/{session_id}/requirements/export")
+async def export_requirements(
+    session_id: int,
+    file: str = Query("docx", description="Export format: 'docx' or 'pdf'"),
+    current_user: UserORM = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+):
+    agent_session = await AgentSessionsCRUD.get_by_id(session, session_id)
+    if not agent_session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    if agent_session.project and agent_session.project.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="You are not owner of this project")
+
+    requirements = await AgentSessionRequirementCRUD.get_by_session_id(session, session_id)
+    if not requirements:
+        raise HTTPException(status_code=404, detail="Requirements not found")
+
+    if file == "pdf":
+        file_stream = markdown_to_pdf(requirements.content)
+        media_type = "application/pdf"
+        filename = f"requirements_{session_id}.pdf"
+    else:
+        file_stream = markdown_to_word(requirements.content)
+        media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        filename = f"requirements_{session_id}.docx"
+
+    return StreamingResponse(
+        file_stream,
+        media_type=media_type,
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
     )

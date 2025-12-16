@@ -6,7 +6,7 @@ from app.cruds import BaseCRUD
 from app.models import (
     AgentSessions as AgentSessionsORM,
     AgentSessionMessage as AgentSessionsMessageORM,
-    SessionMessageTypeEnum,
+    SessionMessageTypeEnum, AgentSessionRequirement as AgentSessionRequirementORM,
 )
 
 
@@ -56,3 +56,14 @@ class AgentSessionMessageCRUD(BaseCRUD):
             )
         )
         return result.first() is not None
+
+class AgentSessionRequirementCRUD(BaseCRUD):
+    model = AgentSessionRequirementORM
+
+    @classmethod
+    async def get_by_session_id(
+            cls, session: AsyncSession, session_id: int
+    ) -> Optional[AgentSessionRequirementORM]:
+        query = select(cls.model).where(cls.model.session_id == session_id)
+        result = await session.execute(query)
+        return result.scalar_one_or_none()

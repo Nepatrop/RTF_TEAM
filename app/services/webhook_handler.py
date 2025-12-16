@@ -2,7 +2,7 @@ from fastapi import Request, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Union
 
-from app.cruds import AgentSessionsCRUD, AgentSessionMessageCRUD, ProjectCRUD
+from app.cruds import AgentSessionsCRUD, AgentSessionMessageCRUD, ProjectCRUD, AgentSessionRequirementCRUD
 from app.models import (
     SessionStatusEnum,
     SessionMessageRoleEnum,
@@ -115,19 +115,30 @@ async def handle_final_result_webhook(
 
     agent_session = await AgentSessionsCRUD.get_by_external_id(session, data.session_id)
     agent_session_upd = {
-        "status": data.session_status,
+        "status": data.session_status.value,
         "current_iteration": data.iteration_number,
     }
     await AgentSessionsCRUD.update(session, agent_session, agent_session_upd)
 
     if data.final_result:
-        message = {
+        message_upd = {
             "session_id": agent_session.id,
             "role": SessionMessageRoleEnum.AGENT,
             "content": data.final_result,
             "message_type": SessionMessageTypeEnum.RESULT,
         }
-        await AgentSessionsCRUD.create(session, message)
+        await AgentSessionMessageCRUD.create(session, message_upd)
+        existing_req = await AgentSessionRequirementCRUD.get_by_session_id(session, agent_session.id)
+        if existing_req:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Requirements already exists",
+            )
+        requirements = {
+            "session_id": agent_session.id,
+            "content": data.final_result,
+        }
+        await AgentSessionRequirementCRUD.create(session, requirements)
 
     project = await ProjectCRUD.get_by_external_id(session, data.project_id)
     if project:
