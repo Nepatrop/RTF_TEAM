@@ -25,7 +25,7 @@ def normalize_question_status(status_value) -> Union[QuestionStatusEnum, None]:
 
         status_str = str(status_value).strip().lower()
 
-        if status_str in ["unanswered", "answered", "skipped"]:
+        if status_str in ["unanswered", "answered", "skiped"]:
             return status_str
         else:
             return "unanswered"
