@@ -59,6 +59,7 @@ async def webhook_update_session(
     session: AsyncSession = Depends(get_db),
     x_request_id: str = Header(..., alias="X-Request-ID"),
 ):
+    print(payload.data)
     if not x_request_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -328,11 +329,15 @@ async def submit_text_answers(
 
     message = await AgentSessionMessageCRUD.create(session, message_data)
     question_external_id = question.question_external_id
+    session_external_id = agent_session.external_session_id
 
     try:
         await agent.health_check()
         await agent.submit_text_answer(
-            session_id, question_external_id, payload.answer, payload.is_skipped
+            session_external_id,
+            question_external_id,
+            payload.answer,
+            payload.is_skipped,
         )
     except HTTPException as e:
         raise HTTPException(

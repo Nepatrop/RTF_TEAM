@@ -23,7 +23,6 @@ class QuestionData(BaseModel):
 class IterationWithQuestions(BaseModel):
     session_id: str
     iteration_id: str
-    project_id: Optional[str] = None
     iteration_number: int
     title: Optional[str] = None
     questions: List[QuestionData]
