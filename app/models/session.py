@@ -37,10 +37,11 @@ class AgentSessions(Base):
         cascade="all, delete-orphan",
         lazy="selectin",
     )
-    requirements = relationship(
+    requirement = relationship(
         "AgentSessionRequirement",
         back_populates="session",
         cascade="all, delete-orphan",
+        uselist=False,
     )
 
 
@@ -84,5 +85,5 @@ class AgentSessionRequirement(Base):
 
     session = relationship(
         "AgentSessions",
-        back_populates="requirements"
+        back_populates="requirement"
     )
