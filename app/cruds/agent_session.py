@@ -6,6 +6,7 @@ from app.cruds import BaseCRUD
 from app.models import (
     AgentSessions as AgentSessionsORM,
     AgentSessionMessage as AgentSessionsMessageORM,
+    SessionMessageTypeEnum,
 )
 
 
@@ -41,3 +42,17 @@ class AgentSessionMessageCRUD(BaseCRUD):
         query = select(cls.model).where(cls.model.question_external_id == question_id)
         result = await session.execute(query)
         return result.scalar_one_or_none()
+
+    @classmethod
+    async def answer_exists(
+        cls,
+        session: AsyncSession,
+        question_id: int,
+    ) -> bool:
+        result = await session.execute(
+            select(cls.model.id).where(
+                cls.model.parent_message_id == question_id,
+                cls.model.message_type == SessionMessageTypeEnum.ANSWER,
+            )
+        )
+        return result.first() is not None

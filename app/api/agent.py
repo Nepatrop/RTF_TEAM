@@ -285,7 +285,10 @@ async def start_agent_session_on_context(
     status_code=200,
     response_model=schemas.UserSessionAnswerShallow,
     responses={
-        400: {"description": "Bad Request", "model": schemas.ErrorResponse},
+        400: {
+            "description": "Question not found | Answer for this question already exists | You are not owner of this project | Session is not waiting for answers",
+            "model": schemas.ErrorResponse,
+        },
         401: {"description": "Unauthorized", "model": schemas.ErrorResponse},
         404: {"description": "Not found", "model": schemas.ErrorResponse},
         500: {"description": "Internal Server Error", "model": schemas.ErrorResponse},
@@ -303,6 +306,16 @@ async def submit_text_answers(
     if not question:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Question not found"
+        )
+    exist_answer = await AgentSessionMessageCRUD.answer_exists(
+        session=session,
+        question_id=question.id,
+    )
+
+    if exist_answer:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Answer for this question already exists",
         )
     agent_session = await AgentSessionsCRUD.get_by_id(session, session_id)
     project = await ProjectCRUD.get_by_id(session, agent_session.project_id)
