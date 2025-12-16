@@ -385,12 +385,6 @@ async def submit_text_answers(
             detail="Answer for this question already exists",
         )
     agent_session = await AgentSessionsCRUD.get_by_id(session, session_id)
-    project = await ProjectCRUD.get_by_id(session, agent_session.project_id)
-    if project.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You are not owner of this project",
-        )
 
     if agent_session.status != SessionStatusEnum.WAITING_FOR_ANSWERS:
         raise HTTPException(
