@@ -46,7 +46,7 @@ async def handle_questions_webhook(
             detail="X-Request-ID header is required",
         )
 
-    project = await ProjectCRUD.get_by_external_id(session, data.project_id)
+    project = await ProjectCRUD.get_last(session)
     project_id = project.id
     agent_session = await AgentSessionsCRUD.get_by_project_id(session, project_id)
     agent_session_id = agent_session.id

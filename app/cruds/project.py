@@ -54,9 +54,8 @@ class ProjectCRUD(BaseCRUD):
         return result.scalar_one_or_none()
 
     @classmethod
-    async def get_by_title(
-        cls, session: AsyncSession, title: str
-    ) -> Optional[ProjectORM]:
-        query = select(cls.model).where(cls.model.title == title)
+    async def get_last(cls, session: AsyncSession) -> Optional[ProjectORM]:
+        query = select(cls.model).order_by(cls.model.created_at.desc()).limit(1)
         result = await session.execute(query)
-        return result.scalar_one_or_none()
+        obj = result.scalar_one_or_none()
+        return obj
