@@ -200,7 +200,7 @@ async def handle_project_update_webhook(
             detail="X-Request-ID header is required",
         )
 
-    project = await ProjectCRUD.get_by_title(session, data.title)
+    project = await ProjectCRUD.get_last(session)
 
     if not project:
         return
