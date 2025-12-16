@@ -105,13 +105,22 @@ async def websocket_agent_session(websocket: WebSocket, session_id: int):
                                 for m in db_session_obj.messages
                                 if m.message_type == SessionMessageTypeEnum.QUESTION
                             ],
-                            key=lambda x: (x.iteration, x.question_number),
+                            key=lambda x: (x.created_at, x.id),
                         )
                         answers = [
                             m
                             for m in db_session_obj.messages
                             if m.message_type == SessionMessageTypeEnum.ANSWER
                         ]
+
+                        result_message = next(
+                            (
+                                m
+                                for m in db_session_obj.messages
+                                if m.message_type == SessionMessageTypeEnum.RESULT
+                            ),
+                            None,
+                        )
 
                         dialogue = []
                         stop = False
@@ -166,6 +175,15 @@ async def websocket_agent_session(websocket: WebSocket, session_id: int):
                             "session_status": db_session_obj.status.value,
                             "current_iteration": db_session_obj.current_iteration,
                             "dialogue": dialogue,
+                            "result": (
+                                {
+                                    "id": result_message.id,
+                                    "content": result_message.content,
+                                    "created_at": result_message.created_at.isoformat(),
+                                }
+                                if result_message
+                                else None
+                            ),
                         }
 
                         await websocket.send_json(payload)

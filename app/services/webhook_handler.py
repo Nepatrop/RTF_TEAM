@@ -11,6 +11,7 @@ from app.models import (
     AgentSessions,
     AgentSessionMessage,
     AgentSessionStatusEnum,
+    ProjectStatusEnum,
 )
 from app import schemas
 
@@ -112,58 +113,26 @@ async def handle_final_result_webhook(
             detail="X-Request-ID header is required",
         )
 
-    try:
-        from sqlalchemy import select
-        from sqlalchemy.orm import selectinload
+    agent_session = await AgentSessionsCRUD.get_by_external_id(session, data.session_id)
+    agent_session_upd = {
+        "status": data.session_status,
+        "current_iteration": data.iteration_number,
+    }
+    await AgentSessionsCRUD.update(session, agent_session, agent_session_upd)
 
-        stmt = (
-            select(AgentSessions)
-            .options(selectinload(AgentSessions.interview))
-            .where(AgentSessions.external_session_id == data.session_id)
-        )
-        result = await session.execute(stmt)
-        agent_session = result.scalar_one_or_none()
+    if data.final_result:
+        message = {
+            "session_id": agent_session.id,
+            "role": SessionMessageRoleEnum.AGENT,
+            "content": data.final_result,
+            "message_type": SessionMessageTypeEnum.RESULT,
+        }
+        await AgentSessionsCRUD.create(session, message)
 
-        if not agent_session:
-            return
-
-        if data.session_status == AgentSessionStatusEnum.DONE:
-            session_status = SessionStatusEnum.DONE
-        elif data.session_status == AgentSessionStatusEnum.ERROR:
-            session_status = SessionStatusEnum.ERROR
-        else:
-            session_status = SessionStatusEnum.PROCESSING
-
-        agent_session.status = session_status
-        agent_session.agent_session_status = data.session_status
-        agent_session.current_iteration = data.iteration_number
-
-        if data.final_result:
-            message = AgentSessionMessage(
-                session_id=agent_session.id,
-                role=SessionMessageRoleEnum.AGENT,
-                content=data.final_result,
-                message_type=SessionMessageTypeEnum.RESULT,
-            )
-            session.add(message)
-
-        interview_status = (
-            InterviewStatusEnum.FINISHED.name
-            if data.session_status == AgentSessionStatusEnum.DONE
-            else InterviewStatusEnum.ACTIVE
-        )
-
-        if agent_session.interview:
-            agent_session.interview.status = interview_status
-
-        await session.commit()
-
-    except Exception as e:
-        await session.rollback()
-        import traceback
-
-        traceback.print_exc()
-
+    project = await ProjectCRUD.get_by_external_id(session, data.project_id)
+    if project:
+        project_upd = {"status": ProjectStatusEnum.FINISHED}
+        await ProjectCRUD.update(session, project, project_upd)
     return {"status": "ok"}
 
 
