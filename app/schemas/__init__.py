@@ -13,8 +13,6 @@ from .session import (
     ContextQuestion,
     SessionStartProjectContextRequest,
     SessionStartManualContextRequest,
-    AnswerQuestion,
-    SkipQuestion,
     SessionAnswerRequest,
     AgentSessionMessageShallow,
     AgentSessionMessageCreate,

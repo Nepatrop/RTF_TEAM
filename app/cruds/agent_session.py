@@ -22,14 +22,22 @@ class AgentSessionsCRUD(BaseCRUD):
         result = await session.execute(query)
         return result.scalar_one_or_none()
 
+    @classmethod
+    async def get_by_project_id(
+        cls, session: AsyncSession, project_id: int
+    ) -> Optional[AgentSessionsORM]:
+        query = select(cls.model).where(cls.model.project_id == project_id)
+        result = await session.execute(query)
+        return result.scalar_one_or_none()
+
 
 class AgentSessionMessageCRUD(BaseCRUD):
     model = AgentSessionsMessageORM
 
     @classmethod
-    async def get_by_question_id(
+    async def get_by_external_question_id(
         cls, session: AsyncSession, question_id: str
     ) -> Optional[AgentSessionsMessageORM]:
-        query = select(cls.model).where(cls.model.question_id == question_id)
+        query = select(cls.model).where(cls.model.question_external_id == question_id)
         result = await session.execute(query)
         return result.scalar_one_or_none()

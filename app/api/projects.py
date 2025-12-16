@@ -44,10 +44,6 @@ async def get_projects_list(
     status_code=201,
     response_model=schemas.ProjectBase,
     responses={
-        400: {
-            "description": "Project with this title already exists",
-            "model": schemas.ErrorResponse,
-        },
         401: {"description": "Unauthorized", "model": schemas.ErrorResponse},
         502: {
             "description": "Agent service HTTP error",
@@ -63,12 +59,6 @@ async def create_project(
     agent: AgentService = Depends(get_agent),
     session: AsyncSession = Depends(get_db),
 ):
-    existing_project = await ProjectCRUD.get_by_title(session, title)
-    if existing_project:
-        raise HTTPException(
-            status_code=400, detail="Project with this title already exists"
-        )
-
     project_data = {
         "title": title,
         "description": description,
