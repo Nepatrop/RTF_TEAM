@@ -178,7 +178,7 @@ class AgentService:
         return response.json()
 
     async def submit_text_answer(
-        self, session_id: str, question_id: int, answer: str, is_skipped: bool = False
+        self, session_id: str, question_id: str, answer: str, is_skipped: bool
     ) -> Dict:
         data = {
             "answers": answer,
@@ -193,7 +193,7 @@ class AgentService:
                     json=data,
                     headers={"X-Request-ID": x_request_id},
                 )
-                if response.status_code != 200:
+                if response.status_code != 202:
                     raise HTTPException(
                         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                         detail="Failed to submit answer",

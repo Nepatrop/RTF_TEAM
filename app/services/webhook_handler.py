@@ -35,7 +35,9 @@ def normalize_question_status(status_value) -> Union[QuestionStatusEnum, None]:
 
 
 async def handle_questions_webhook(
-    request: Request, data: schemas.IterationWithQuestions, session: AsyncSession
+    request: Request,
+    data: schemas.IterationWithQuestions,
+    session: AsyncSession,
 ):
     request_id = request.headers.get("X-Request-ID")
     if not request_id:
@@ -45,34 +47,54 @@ async def handle_questions_webhook(
         )
 
     project = await ProjectCRUD.get_by_external_id(session, data.project_id)
-    if not project:
-        project_data = {
-            "external_id": data.project_id,
-            "title": None,
-        }
-        # хЗ че делать, надо обновить external_id
-    agent_session = project.session
-    agent_session_data = {"external_session_id": data.session_id}
+    project_id = project.id
+    agent_session = await AgentSessionsCRUD.get_by_project_id(session, project_id)
+    agent_session_id = agent_session.id
 
-    upd_session = await AgentSessionsCRUD.update(
-        session, agent_session, agent_session_data
+    await AgentSessionsCRUD.update(
+        session,
+        agent_session,
+        {
+            "external_session_id": data.session_id,
+            "current_iteration": data.iteration_number,
+        },
     )
-    session_id = upd_session.id
-    for i, question in enumerate(data.questions):
-        message_data = {
-            "session_id": session_id,
-            "role": SessionMessageRoleEnum.AGENT,
-            "content": question.question,
-            "message_type": SessionMessageTypeEnum.QUESTION,
-            "question_id": question.id,
-            "question_number": question.question_number,
-            "question_status": normalize_question_status(question.status),
-            "explanation": question.explanation,
-        }
-        await AgentSessionMessageCRUD.create(session, message_data)
 
-    agent_session_data = {"status": SessionStatusEnum.WAITING_FOR_ANSWERS}
-    await AgentSessionsCRUD.update(session, agent_session, agent_session_data)
+    for question in data.questions:
+        existing = await AgentSessionMessageCRUD.get_by_external_question_id(
+            session, question.id
+        )
+
+        normalized_status = normalize_question_status(question.status)
+
+        if existing:
+            await AgentSessionMessageCRUD.update(
+                session,
+                existing,
+                {
+                    "question_status": normalized_status,
+                },
+            )
+        else:
+            await AgentSessionMessageCRUD.create(
+                session,
+                {
+                    "session_id": agent_session_id,
+                    "role": SessionMessageRoleEnum.AGENT,
+                    "content": question.question,
+                    "message_type": SessionMessageTypeEnum.QUESTION,
+                    "question_external_id": question.id,
+                    "question_number": question.question_number,
+                    "question_status": normalized_status,
+                    "explanation": question.explanation,
+                },
+            )
+
+    await AgentSessionsCRUD.update(
+        session,
+        agent_session,
+        {"status": SessionStatusEnum.WAITING_FOR_ANSWERS},
+    )
 
     return {"status": "ok"}
 

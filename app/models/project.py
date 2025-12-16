@@ -15,7 +15,7 @@ class Project(Base):
     user_id = Column(
         Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
-    title = Column(String, nullable=False, unique=True)
+    title = Column(String, nullable=False)
     description = Column(Text, nullable=True)
     status = Column(Enum(ProjectStatusEnum), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

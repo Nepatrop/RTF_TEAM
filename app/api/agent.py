@@ -23,6 +23,7 @@ from app.models import (
     SessionStatusEnum,
     SessionMessageTypeEnum,
     SessionMessageRoleEnum,
+    QuestionStatusEnum,
 )
 from app.dependencies import get_current_user, get_agent
 from app.services import (
@@ -97,44 +98,84 @@ async def websocket_agent_session(websocket: WebSocket, session_id: int):
                             )
                             continue
 
-                        messages = []
-                        for msg in db_session_obj.messages:
-                            message_data = {
-                                "role": msg.role.value,
-                                "message_type": msg.message_type.value,
-                                "content": msg.content,
-                                "created_at": msg.created_at.isoformat(),
-                            }
-                            if msg.question_id:
-                                message_data["question_id"] = msg.question_id
-                            if msg.question_number:
-                                message_data["question_number"] = msg.question_number
-                            if msg.question_status:
-                                message_data["question_status"] = (
-                                    msg.question_status.value
-                                )
-                            if msg.explanation:
-                                message_data["explanation"] = msg.explanation
-                            if msg.parent_message_id:
-                                message_data["parent_message_id"] = (
-                                    msg.parent_message_id
-                                )
-
-                            messages.append(message_data)
-
-                        await websocket.send_json(
-                            {
-                                "status": "ok",
-                                "session_id": session_id,
-                                "session_status": db_session_obj.status.value,
-                                "current_iteration": db_session_obj.current_iteration,
-                                "messages": messages if messages else [],
-                            }
+                        questions = sorted(
+                            [
+                                m
+                                for m in db_session_obj.messages
+                                if m.message_type == SessionMessageTypeEnum.QUESTION
+                            ],
+                            key=lambda x: x.question_number,
                         )
+                        answers = [
+                            m
+                            for m in db_session_obj.messages
+                            if m.message_type == SessionMessageTypeEnum.ANSWER
+                        ]
+
+                        dialogue = []
+                        stop = False
+                        for q in questions:
+                            if stop:
+                                break
+
+                            answer = next(
+                                (a for a in answers if a.parent_message_id == q.id),
+                                None,
+                            )
+
+                            if answer:
+                                answer_dict = {
+                                    "id": answer.id,
+                                    "content": answer.content,
+                                    "created_at": answer.created_at.isoformat(),
+                                }
+                                if answer.is_skipped:
+                                    answer_dict["is_skipped"] = True
+
+                                dialogue.append(
+                                    {
+                                        "question": {
+                                            "id": q.id,
+                                            "content": q.content,
+                                            "question_number": q.question_number,
+                                            "status": q.question_status.value,
+                                            "explanation": q.explanation,
+                                            "created_at": q.created_at.isoformat(),
+                                        },
+                                        "answer": answer_dict,
+                                    }
+                                )
+                            else:
+                                dialogue.append(
+                                    {
+                                        "question": {
+                                            "id": q.id,
+                                            "content": q.content,
+                                            "question_number": q.question_number,
+                                            "status": q.question_status.value,
+                                            "explanation": q.explanation,
+                                            "created_at": q.created_at.isoformat(),
+                                        },
+                                        "answer": None,
+                                    }
+                                )
+                                stop = True
+
+                        payload = {
+                            "status": "ok",
+                            "session_id": session_id,
+                            "session_status": db_session_obj.status.value,
+                            "current_iteration": db_session_obj.current_iteration,
+                            "dialogue": dialogue,
+                        }
+
+                        await websocket.send_json(payload)
+
                 except Exception as e:
                     await websocket.send_json(
                         {"status": "error", "message": f"Server error: {str(e)}"}
                     )
+
             elif data == "disconnect":
                 await websocket.close()
                 break
@@ -192,6 +233,7 @@ async def start_agent_session_on_project(
         )
     session_data = {
         "project_id": project.id,
+        "user_goal": payload.user_goal,
         "status": SessionStatusEnum.PROCESSING,
     }
 
@@ -251,18 +293,19 @@ async def start_agent_session_on_context(
 async def submit_text_answers(
     payload: schemas.SessionAnswerRequest,
     session_id: PositiveInt = Path(..., description="The identifier of session"),
-    question_id: str = Path(..., description="The identifier of question"),
+    question_id: int = Path(..., description="The identifier of question"),
     current_user: UserORM = Depends(get_current_user),
     agent: AgentService = Depends(get_agent),
     session: AsyncSession = Depends(get_db),
 ):
-    question = await AgentSessionMessageCRUD.get_by_question_id(session, question_id)
+    question = await AgentSessionMessageCRUD.get_by_id(session, question_id)
     if not question:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Question not found"
         )
     agent_session = await AgentSessionsCRUD.get_by_id(session, session_id)
-    if agent_session.project.user_id != current_user.id:
+    project = await ProjectCRUD.get_by_id(session, agent_session.project_id)
+    if project.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You are not owner of this project",
@@ -279,14 +322,18 @@ async def submit_text_answers(
         "parent_message_id": question.id,
         "role": SessionMessageRoleEnum.USER,
         "content": payload.answer,
+        "is_skipped": payload.is_skipped,
         "message_type": SessionMessageTypeEnum.ANSWER,
     }
 
     message = await AgentSessionMessageCRUD.create(session, message_data)
+    question_external_id = question.question_external_id
 
     try:
         await agent.health_check()
-        await agent.submit_text_answer(session_id, question_id, payload.answer)
+        await agent.submit_text_answer(
+            session_id, question_external_id, payload.answer, payload.is_skipped
+        )
     except HTTPException as e:
         raise HTTPException(
             status_code=e.status_code,
@@ -367,7 +414,7 @@ async def get_session_status(
             role=msg.role,
             message_type=msg.message_type,
             content=msg.content,
-            question_id=msg.question_id,
+            question_external_id=msg.question_external_id,
             question_number=msg.question_number,
             question_status=msg.question_status,
             explanation=msg.explanation,

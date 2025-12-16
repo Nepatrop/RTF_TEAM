@@ -23,7 +23,7 @@ class QuestionData(BaseModel):
 class IterationWithQuestions(BaseModel):
     session_id: str
     iteration_id: str
-    project_id: str
+    project_id: Optional[str] = None
     iteration_number: int
     title: Optional[str] = None
     questions: List[QuestionData]
@@ -83,16 +83,6 @@ class SessionStartManualContextRequest(BaseModel):
 # Модели ответов
 
 
-class AnswerQuestion(BaseModel):
-    question_id: str
-    answer: str
-
-
-class SkipQuestion(BaseModel):
-    question_id: str
-    reason: Optional[str] = None
-
-
 class SessionAnswerRequest(BaseModel):
     answer: str
     is_skipped: bool = False
@@ -102,10 +92,11 @@ class SessionAnswerRequest(BaseModel):
 
 
 class AgentSessionMessageShallow(BaseModel):
+    id: int
     role: SessionMessageRoleEnum
     message_type: SessionMessageTypeEnum
     content: str
-    question_id: Optional[str] = None
+    question_external_id: str
     question_number: Optional[int] = None
     question_status: Optional[QuestionStatusEnum] = None
     explanation: Optional[str] = None
@@ -118,8 +109,8 @@ class AgentSessionMessageShallow(BaseModel):
 class UserSessionAnswerShallow(BaseModel):
     role: SessionMessageRoleEnum
     message_type: SessionMessageTypeEnum
-    parent_message_id: int
     content: str
+    is_skipped: bool
     created_at: datetime
 
     class Config:
@@ -143,6 +134,7 @@ class AgentSessionCreate(BaseModel):
     status: SessionStatusEnum
     agent_session_status: Optional[AgentSessionStatusEnum] = None
     current_iteration: int
+    user_goal: str
     context_questions: Optional[Dict[str, str]] = None
     callback_url: str
 
@@ -157,6 +149,7 @@ class SessionStatusResponse(BaseModel):
     id: int
     external_session_id: str
     status: SessionStatusEnum
+    user_goal: str
     current_iteration: int
     messages: Optional[List[AgentSessionMessageShallow]] = []
 
@@ -167,6 +160,7 @@ class SessionStatusResponse(BaseModel):
 class AgentSessionBase(BaseModel):
     id: int
     external_session_id: Optional[str] = None
+    user_goal: str
     status: SessionStatusEnum
     current_iteration: int
 

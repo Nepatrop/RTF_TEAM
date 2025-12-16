@@ -1,4 +1,13 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Enum, JSON
+from sqlalchemy import (
+    Column,
+    Integer,
+    String,
+    Text,
+    DateTime,
+    ForeignKey,
+    Enum,
+    Boolean,
+)
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 
@@ -20,6 +29,7 @@ class AgentSessions(Base):
     external_session_id = Column(String, unique=True, nullable=True)
     status = Column(Enum(SessionStatusEnum), nullable=False)
     current_iteration = Column(Integer, nullable=False, default=1)
+    user_goal = Column(String, nullable=False)
 
     project = relationship("Project", back_populates="session")
     messages = relationship(
@@ -41,7 +51,8 @@ class AgentSessionMessage(Base):
     role = Column(Enum(SessionMessageRoleEnum), nullable=False)
     content = Column(String, nullable=False)
     message_type = Column(Enum(SessionMessageTypeEnum), nullable=False)
-    question_id = Column(String, nullable=True)
+    question_external_id = Column(String, nullable=True)
+    is_skipped = Column(Boolean, nullable=True)
     question_number = Column(Integer, nullable=True)
     question_status = Column(
         Enum(QuestionStatusEnum, values_callable=lambda obj: [e.value for e in obj]),
@@ -51,4 +62,8 @@ class AgentSessionMessage(Base):
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    session = relationship("AgentSessions", back_populates="messages")
+    session = relationship(
+        "AgentSessions",
+        back_populates="messages",
+        lazy="selectin",
+    )
