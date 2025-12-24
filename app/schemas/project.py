@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import List, Optional
 
 from app.models import ProjectStatusEnum
+from app.schemas.session import AgentSessionWithRequirement
 
 
 class ProjectFileBase(BaseModel):
@@ -35,6 +36,7 @@ class ProjectBase(BaseModel):
     updated_at: Optional[datetime]
 
     files: List[ProjectFileBase] = []
+    session: Optional[AgentSessionWithRequirement] = None
 
     class Config:
         from_attributes = True

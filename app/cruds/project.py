@@ -1,9 +1,11 @@
 from sqlalchemy import select, or_, func, desc, case
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Tuple, Optional
+from sqlalchemy.orm import selectinload
 
+from app.exceptions.custom import NotFoundException
 from app.cruds import BaseCRUD
-from app.models import Project as ProjectORM
+from app.models import Project as ProjectORM, AgentSessions
 from app.models import User as UserORM
 
 
@@ -58,4 +60,24 @@ class ProjectCRUD(BaseCRUD):
         query = select(cls.model).order_by(cls.model.created_at.desc()).limit(1)
         result = await session.execute(query)
         obj = result.scalar_one_or_none()
+        return obj
+
+    @classmethod
+    async def get_full_by_id(cls, session: AsyncSession, _id: int):
+        query = (
+            select(cls.model)
+            .where(cls.model.id == _id)
+            .options(
+                selectinload(cls.model.files),
+                selectinload(cls.model.session)
+                .selectinload(AgentSessions.requirement)
+            )
+        )
+
+        result = await session.execute(query)
+        obj = result.scalar_one_or_none()
+
+        if obj is None:
+            raise NotFoundException(cls.model.__tablename__, "id", _id)
+
         return obj

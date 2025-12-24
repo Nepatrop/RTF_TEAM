@@ -21,6 +21,7 @@ from .session import (
     SessionStatusResponse,
     AgentSessionBase,
     UserSessionAnswerShallow,
+    AgentSessionWithRequirement
 )
 from .requirements import RequirementBase, RequirementUpdate
 
@@ -66,4 +67,5 @@ _all_ = (
     "UserSessionAnswerShallow",
     "RequirementBase",
     "RequirementUpdate",
+    "AgentSessionWithRequirement"
 )

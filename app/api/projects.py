@@ -114,7 +114,7 @@ async def get_project_by_id(
     current_user: UserORM = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ):
-    project = await ProjectCRUD.get_by_id(session, project_id)
+    project = await ProjectCRUD.get_full_by_id(session, project_id)
     if project.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
