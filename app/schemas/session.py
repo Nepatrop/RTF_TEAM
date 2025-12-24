@@ -10,6 +10,7 @@ from app.models import (
     QuestionStatusEnum,
     AgentSessionStatusEnum,
 )
+from app.schemas.requirements import RequirementBase
 
 
 class QuestionData(BaseModel):
@@ -165,3 +166,16 @@ class AgentSessionBase(BaseModel):
 
     class Config:
         from_attributes = True
+
+class AgentSessionWithRequirement(BaseModel):
+    id: int
+    external_session_id: Optional[str]
+    status: SessionStatusEnum
+    current_iteration: int
+    user_goal: str
+
+    requirement: Optional[RequirementBase] = None
+
+    class Config:
+        from_attributes = True
+

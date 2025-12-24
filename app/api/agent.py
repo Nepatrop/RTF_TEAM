@@ -439,15 +439,15 @@ async def cancel_session(
 ):
     agent_session = await AgentSessionsCRUD.get_by_id(session, session_id)
 
-    if agent_session.project.user_id != current_user.id:
+    if agent_session.status == SessionStatusEnum.DONE:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You are not owner of this project",
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You cannot canceled this session",
         )
 
     try:
         await agent.health_check()
-        await agent.cancel_session(session_id)
+        await agent.cancel_session(agent_session.external_session_id)
     except HTTPException as e:
         raise HTTPException(
             status_code=e.status_code,
